@@ -183,7 +183,9 @@ def cmd_form(etiquette, valeur):
         adb("shell", "input", "keyevent", "123")
         for _ in range(len((cible.get("text") or "")) + 6):
             adb("shell", "input", "keyevent", "67")
-        adb("shell", "input", "text", valeur.replace(" ", "%s"))
+        # `input keyboard text` : la variante `input text` n'arrive pas dans les
+        # champs Compose quand l'IME est déjà instancié (vécu 08/11/2026).
+        adb("shell", "input", "keyboard", "text", valeur.replace(" ", "%s"))
         subprocess.run(["sleep", "1"], check=False)
         adb("shell", "input", "keyevent", "4")
         subprocess.run(["sleep", "1"], check=False)

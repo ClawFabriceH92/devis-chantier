@@ -424,6 +424,15 @@ fun EcranReglages(
                         modifier = Modifier.weight(1f),
                     )
                 }
+                if (reglages.iaCleNonSecurisee) {
+                    Spacer(Modifier.height(6.dp))
+                    BlocAlerte(
+                        "Ce téléphone n'a pas de coffre sécurisé disponible : la clé fonctionne " +
+                            "pendant cette session mais n'est pas enregistrée. Elle sera à ressaisir " +
+                            "au prochain démarrage.",
+                        Couleurs.rouge,
+                    )
+                }
                 if (testCle.isNotBlank()) {
                     Spacer(Modifier.height(6.dp))
                     BlocAlerte(testCle)

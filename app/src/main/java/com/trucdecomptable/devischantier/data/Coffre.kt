@@ -17,6 +17,17 @@ import javax.crypto.spec.GCMParameterSpec
  */
 object Coffre {
 
+    /**
+     * Repli en mémoire : certains téléphones (et les conteneurs Android de test)
+     * n'ont pas de Keystore fonctionnel. La clé reste alors utilisable pour la
+     * session en cours mais n'est jamais écrite en clair sur le disque.
+     */
+    @Volatile
+    var enMemoire: String? = null
+
+    val keystoreIndisponible: Boolean
+        get() = !runCatching { cle() }.isSuccess
+
     private const val ALIAS = "devischantier_cle_api"
     private const val TRANSFORMATION = "AES/GCM/NoPadding"
     private const val LONGUEUR_TAG = 128

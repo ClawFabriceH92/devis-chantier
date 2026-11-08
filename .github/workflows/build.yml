@@ -158,7 +158,11 @@ jobs:
           arch: x86_64
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
-          script: bash scripts/smoke-test.sh
+          # Deux niveaux : les vérifications qui exigent un vrai Android (PDF,
+          # Keystore, Room) puis le parcours visuel avec captures d'écran.
+          script: |
+            ./gradlew connectedDebugAndroidTest --no-daemon
+            bash scripts/smoke-test.sh
 
       - name: Upload emulator screenshots and dumps
         if: always()

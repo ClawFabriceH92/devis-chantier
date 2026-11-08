@@ -175,13 +175,26 @@ class Reglages(context: Context) {
         get() = prefs.getBoolean("ia_consentement", false)
         set(v) = prefs.edit().putBoolean("ia_consentement", v).apply()
 
-    /** Clé API : chiffrée par la clé matérielle Android, jamais en clair (S-02). */
+    /**
+     * Clé API : chiffrée par la clé matérielle Android, jamais en clair (S-02).
+     * Si le Keystore du téléphone est indisponible, la clé n'est pas écrite et
+     * n'est gardée qu'en mémoire pour la session : l'écran des réglages le dit.
+     */
     var iaCle: String?
         get() = prefs.getString("ia_cle_chiffree", null)?.let { Coffre.dechiffrer(it) }
+            ?: Coffre.enMemoire
         set(v) {
-            val chiffre = v?.takeIf { it.isNotBlank() }?.let { Coffre.chiffrer(it) }
+            val clair = v?.takeIf { it.isNotBlank() }
+            Coffre.enMemoire = clair
+            val chiffre = clair?.let { Coffre.chiffrer(it) }
             prefs.edit().putString("ia_cle_chiffree", chiffre).apply()
+            iaCleNonSecurisee = clair != null && chiffre == null
         }
+
+    /** Vrai quand la clé n'a pas pu être chiffrée par le Keystore du téléphone. */
+    var iaCleNonSecurisee: Boolean
+        get() = prefs.getBoolean("ia_cle_non_securisee", false)
+        set(v) = prefs.edit().putBoolean("ia_cle_non_securisee", v).apply()
 
     // ---- rappels (F-38, §5.4) ----
     var notificationsActives: Boolean
