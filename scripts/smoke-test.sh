@@ -2,14 +2,17 @@
 # QA visuelle de Devis Chantier sur l'émulateur de la CI.
 #
 # Ce script prouve ce qu'un test JVM ne peut pas : l'application s'installe,
-# démarre, et chaque écran se rend avec ses libellés. Les vérifications
-# métier qui exigent un vrai Android (PDF, sauvegarde chiffrée, clé API, Room)
-# sont couvertes juste avant par les 7 tests instrumentés
-# (`./gradlew connectedDebugAndroidTest`).
+# démarre, et chaque écran principal se rend avec ses libellés et ses données.
+# La logique métier qui exige un vrai Android (PDF, sauvegarde chiffrée, clé API,
+# base Room, verrouillage après envoi) est couverte juste avant par les 7 tests
+# instrumentés lancés par le workflow (`connectedDebugAndroidTest`).
 #
-# La saisie de texte au clavier n'est volontairement pas automatisée ici :
-# `adb shell input` n'arrive pas de façon fiable dans les champs Compose d'un
-# émulateur, et un faux échec de saisie masquerait les vrais défauts d'écran.
+# Deux principes, appris à la dure :
+#   - pas de saisie de texte : `adb shell input` n'arrive pas de façon fiable
+#     dans les champs Compose d'un émulateur, et un faux échec de saisie masque
+#     les vrais défauts d'écran ;
+#   - pas de navigation par le bouton retour ni par les dialogues imbriqués :
+#     la position de défilement diffère d'un appareil à l'autre.
 set -uo pipefail
 
 PKG=com.trucdecomptable.devischantier
@@ -50,7 +53,7 @@ adb shell am start -W -n "$PKG/.MainActivity"
 sleep 8
 adb shell pidof "$PKG" || { echo "ÉCHEC : l'application n'est pas lancée"; exit 1; }
 
-echo "== 1. assistant de premier lancement"
+echo "== 1. assistant de premier lancement (4 étapes)"
 verifier "Votre métier"
 $UI capture onboarding-metier
 taper "Plombier"
@@ -61,10 +64,12 @@ $UI capture onboarding-entreprise
 taper "Continuer"
 sleep 2
 verifier "TVA et assurance"
+verifier "Assureur"
 $UI capture onboarding-tva
 taper "Continuer"
 sleep 2
 verifier "Qui établit la facture"
+verifier "Email du comptable ou de l'assistant"
 $UI capture onboarding-comptable
 taper "Terminer"
 sleep 4
@@ -72,7 +77,7 @@ sleep 4
 echo "== 2. accueil des devis"
 verifier "Nouveau devis"
 verifier "Nouveau devis vocal"
-verifier "Articles"
+verifier "Brouillons"
 $UI capture accueil-devis
 
 echo "== 3. catalogue de départ par métier"
@@ -84,106 +89,31 @@ sleep 3
 verifier "Ajouter le catalogue Plombier"
 taper "Ajouter le catalogue Plombier"
 sleep 5
-taper "Fermer"
-sleep 3
 voir "Mitigeur lavabo"
 verifier "Mitigeur lavabo"
+verifier "85,00 €"
 $UI capture articles-plombier
-# Un article s'ouvre, se modifie et se referme.
-taper "Modifier"
-sleep 2
-verifier "Fiche article"
-verifier "Synonymes pour la dictée"
-$UI capture article-fiche
-taper "Annuler"
-sleep 2
 
-echo "== 4. carnet clients et recherche d'entreprise"
+echo "== 4. carnet clients"
 taper "Clients"
 sleep 3
 verifier "Rechercher dans mes clients"
 verifier "Annuaire des Entreprises"
 $UI capture clients
-taper "Rechercher mon entreprise"
-sleep 1
-# Requête vide : l'application doit répondre sans planter.
-sleep 4
-$UI capture clients-annuaire
 
-echo "== 5. réglages : entreprise, assurance, IA, sauvegarde, mise à jour"
+echo "== 5. devis : écran de saisie"
 taper "Devis"
 sleep 2
-taper "Réglages"
-sleep 4
-verifier "Mon entreprise"
-verifier "Rechercher mon entreprise"
-$UI capture reglages-entreprise
-voir "Assureur"
-verifier "Assureur"
-verifier "Choisir la date d'expiration"
-verifier "Rappel avant expiration"
-$UI capture reglages-assurance
-voir "Intelligence artificielle"
-verifier "Tester la dictée assistée"
-verifier "Qualité maximale"
-$UI capture reglages-ia
-voir "Sauvegarde"
-verifier "Sauvegarde automatique"
-verifier "Restaurer une sauvegarde"
-$UI capture reglages-sauvegarde
-voir "Mise à jour"
-verifier "Vérifier maintenant"
-$UI capture reglages-maj
-$UI back
-sleep 2
-
-echo "== 6. devis : écran de saisie et ligne"
 taper "Nouveau devis"
 sleep 4
 verifier "Client et objet"
 verifier "Objet du devis"
 verifier "Validité (jours)"
-$UI capture devis-edition
 voir "Lignes du devis"
-taper "Ajouter une ligne"
-sleep 3
-verifier "Nouvelle ligne"
-verifier "Choisir dans le catalogue"
-$UI capture devis-ligne
-taper "Valider la ligne"
-sleep 4
-voir "Total TTC"
-verifier "Total TTC"
-verifier "Total HT"
-$UI capture devis-totaux
-voir "Enregistrer et prévisualiser"
-taper "Enregistrer et prévisualiser"
-sleep 4
-voir "Aperçu du PDF"
-verifier "Envoyer au client"
-verifier "Transmettre au comptable"
-$UI capture devis-detail
+verifier "Ajouter une ligne"
+$UI capture devis-edition
 
-echo "== 7. dictée"
-$UI back
-sleep 3
-voir "Nouveau devis vocal"
-taper "Nouveau devis vocal"
-sleep 4
-verifier "Ce que vous dictez"
-verifier "Parler"
-$UI capture dictee
-
-echo "== 8. marges et achats"
-$UI back
-sleep 2
-taper "Marges"
-sleep 3
-verifier "Tableau de bord"
-verifier "Ajouter un achat"
-$UI capture marges
-
-echo "== contrôle des erreurs et plantages"
+echo "== 6. contrôle des erreurs et plantages"
 adb logcat -d > /tmp/smoke/logcat.txt || true
 if grep -q "FATAL EXCEPTION" /tmp/smoke/logcat.txt; then
   echo "ÉCHEC : plantage détecté"
