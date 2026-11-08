@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -139,6 +140,16 @@ private fun Application(reglages: Reglages, intention: Intent?) {
     LaunchedEffect(reglages.onboardingFait) {
         if (reglages.onboardingFait && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             permissionNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
+    // Le bouton retour d'Android ramène à l'accueil au lieu de fermer
+    // l'application : un artisan qui sort des réglages ne doit pas se
+    // retrouver sur le launcher du téléphone.
+    BackHandler(enabled = ecran != Ecran.Devis && ecran != Ecran.Onboarding) {
+        ecran = when (val courant = ecran) {
+            is Ecran.Dictee -> courant.devisId?.let { Ecran.Edition(it) } ?: Ecran.Devis
+            else -> Ecran.Devis
         }
     }
 
