@@ -161,6 +161,10 @@ class Reglages(context: Context) {
     var iaModele: String
         get() = prefs.getString("ia_modele", "").orEmpty()
         set(v) = prefs.edit().putString("ia_modele", v).apply()
+    /** Niveau de qualité demandé (QUALITE, EQUILIBRE, ECONOMIE). */
+    var iaNiveau: String
+        get() = prefs.getString("ia_niveau", "QUALITE").orEmpty()
+        set(v) = prefs.edit().putString("ia_niveau", v).apply()
     var iaBaseUrl: String
         get() = prefs.getString("ia_base_url", "").orEmpty()
         set(v) = prefs.edit().putString("ia_base_url", v).apply()

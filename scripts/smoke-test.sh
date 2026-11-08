@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 # QA visuelle de Devis Chantier sur l'émulateur de la CI.
-# Chaque étape vérifie un texte attendu et prend une capture : un écran vide ou
-# un libellé disparu fait échouer le job, et les PNG restent en artefact.
+#
+# Le parcours va jusqu'au bout d'un devis : paramétrage de l'entreprise et de
+# l'assurance, création d'un client, ligne prise dans le catalogue, contrôle des
+# mentions, génération du PDF. Chaque étape vérifie un texte attendu et prend une
+# capture : un écran vide ou un libellé disparu fait échouer le job, et les PNG
+# restent en artefact.
 set -uo pipefail
 
 PKG=com.trucdecomptable.devischantier
@@ -12,7 +16,6 @@ ECHECS=0
 verifier() {
   if ! $UI expect "$1"; then
     echo "ÉCHEC : écran inattendu, « $1 » attendu"
-    $UI dump || true
     ECHECS=$((ECHECS + 1))
   fi
 }
@@ -20,6 +23,20 @@ verifier() {
 taper() {
   if ! $UI tap "$1"; then
     echo "ÉCHEC : impossible de taper « $1 »"
+    ECHECS=$((ECHECS + 1))
+  fi
+}
+
+remplir() {
+  if ! $UI form "$1" "$2"; then
+    echo "ÉCHEC : champ « $1 » non rempli"
+    ECHECS=$((ECHECS + 1))
+  fi
+}
+
+voir() {
+  if ! $UI defiler "$1"; then
+    echo "ÉCHEC : « $1 » introuvable après défilement"
     ECHECS=$((ECHECS + 1))
   fi
 }
@@ -59,75 +76,122 @@ echo "== 2. accueil des devis"
 verifier "Nouveau devis"
 $UI capture accueil-devis
 
-echo "== 3. création d'un devis"
-taper "Nouveau devis"
+echo "== 3. paramétrage de l'entreprise (roue dentée)"
+taper "Réglages"
 sleep 4
-verifier "Client et objet"
-verifier "Lignes du devis"
-$UI capture devis-edition
-taper "Ajouter une ligne"
-sleep 3
-verifier "Nouvelle ligne"
-verifier "Choisir dans le catalogue"
-$UI capture devis-ligne
-taper "Annuler"
+verifier "Mon entreprise"
+remplir "Dénomination" "Plomberie Martin"
+remplir "Adresse" "1 rue des Artisans 92600 Asnieres"
+remplir "SIREN" "123456789"
+$UI swipe-haut
+$UI swipe-haut
+voir "Assureur"
+remplir "Assureur" "AXA IARD"
+remplir "Coordonnées de l'assureur" "12 avenue de la Paix 75010 Paris"
+taper "Choisir la date d'expiration"
+sleep 2
+verifier "Expiration de l'attestation"
+$UI capture reglages-assurance
+voir "Médiateur de la consommation"
+remplir "Médiateur de la consommation" "CM2C 14 rue Saint Jean 75010 Paris"
+voir "Intelligence artificielle"
+verifier "Intelligence artificielle"
+$UI capture reglages-ia
+voir "Mise à jour"
+verifier "Mise à jour"
+$UI capture reglages-maj
+$UI back
 sleep 2
 
 echo "== 4. catalogue d'articles et catalogue de départ"
 taper "Articles"
 sleep 3
 verifier "Catalogue de départ"
-$UI capture articles
+$UI capture articles-vides
 taper "Catalogue de départ"
 sleep 3
 taper "Ajouter le catalogue Plombier"
-sleep 4
-$UI tap "Fermer"
+sleep 5
+taper "Fermer"
 sleep 3
+voir "Mitigeur lavabo"
 verifier "Mitigeur lavabo"
 $UI capture articles-plombier
 
-echo "== 5. carnet clients et recherche d'entreprise"
+echo "== 5. carnet clients"
 taper "Clients"
 sleep 3
 verifier "Rechercher dans mes clients"
 verifier "Entreprise"
 $UI capture clients
+taper "Nouveau client"
+sleep 2
+remplir "Nom" "M. Durand"
+taper "Enregistrer"
+sleep 3
+verifier "M. Durand"
+$UI capture clients-rempli
 
-echo "== 6. réglages, IA et sauvegarde"
+echo "== 6. devis complet avec ligne du catalogue"
 taper "Devis"
 sleep 2
-taper "Réglages"
+taper "Nouveau devis"
 sleep 4
-verifier "Mon entreprise"
-verifier "Assurance professionnelle"
-$UI capture reglages-haut
-$UI swipe-haut
-$UI swipe-haut
-$UI swipe-haut
-verifier "Intelligence artificielle"
-$UI capture reglages-ia
-$UI swipe-haut
-$UI swipe-haut
-$UI swipe-haut
-verifier "Sauvegarde"
-$UI capture reglages-sauvegarde
-$UI swipe-haut
-$UI swipe-haut
-$UI swipe-haut
-verifier "Mise à jour"
-$UI capture reglages-maj
-
-echo "== 7. dictée (le micro doit être disponible)"
-$UI back
+verifier "Client et objet"
+taper "Choisir un client"
 sleep 2
-taper "Nouveau devis vocal"
+taper "M. Durand"
+sleep 2
+remplir "Objet du devis" "Renovation salle de bain"
+voir "Lignes du devis"
+taper "Ajouter une ligne"
 sleep 3
+verifier "Nouvelle ligne"
+taper "Rechercher un article"
+sleep 1
+adb shell input text "Mitigeur"
+sleep 2
+adb shell input keyevent 4
+sleep 2
+taper "Mitigeur lavabo"
+sleep 2
+verifier "Mitigeur lavabo"
+$UI capture ligne-catalogue
+taper "Valider la ligne"
+sleep 4
+voir "Total TTC"
+verifier "Total TTC"
+$UI capture devis-totaux
+voir "Enregistrer et prévisualiser"
+taper "Enregistrer et prévisualiser"
+sleep 4
+voir "Actions"
+
+echo "== 7. contrôle des mentions et génération du PDF"
+voir "Aperçu du PDF"
+taper "Aperçu du PDF"
+sleep 5
+$UI capture devis-apercu
+if $UI dump | grep -qi "Mentions obligatoires manquantes"; then
+  echo "ÉCHEC : mentions obligatoires encore incomplètes après paramétrage"
+  $UI dump | head -40
+  ECHECS=$((ECHECS + 1))
+else
+  echo "OK  aucune mention obligatoire manquante"
+fi
+
+echo "== 8. dictée (le micro doit être disponible)"
+$UI back
+sleep 3
+voir "Nouveau devis vocal"
+taper "Nouveau devis vocal"
+sleep 4
 verifier "Ce que vous dictez"
 $UI capture dictee
 
 echo "== contrôle des erreurs et plantages"
 adb logcat -d > /tmp/smoke/logcat.txt || true
+grep -i "pdf" /tmp/smoke/logcat.txt | head -5 || true
 if grep -q "FATAL EXCEPTION" /tmp/smoke/logcat.txt; then
   echo "ÉCHEC : plantage détecté"
   grep -A 25 "FATAL EXCEPTION" /tmp/smoke/logcat.txt | head -60

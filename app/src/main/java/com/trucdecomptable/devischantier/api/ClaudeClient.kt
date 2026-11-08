@@ -31,11 +31,66 @@ object ClaudeClient {
     const val BASE = "https://api.anthropic.com"
     const val VERSION_API = "2023-06-01"
     /**
-     * Modèle par défaut : les identifiants changent souvent (le préfixe daté
-     * « claude-haiku-4-5 » a été retiré). La liste est de toute façon relue
-     * chez le fournisseur par [listerModeles] et ce nom n'est qu'un repli.
+     * Meilleur modèle disponible chez Anthropic : la dictée doit comprendre une
+     * phrase libre du premier coup, donc on prend le haut de gamme et non le
+     * petit modèle. Les identifiants changent souvent (le préfixe daté
+     * « claude-haiku-4-5 » a été retiré) : la liste est de toute façon relue
+     * chez le fournisseur par [listerModeles], ce nom n'est qu'un repli.
      */
-    const val MODELE_DEFAUT = "claude-haiku-5-5"
+    const val MODELE_DEFAUT = "claude-opus-5-5"
+
+    /** Niveaux proposés à l'artisan, du plus fin au plus économique. */
+    object Niveau {
+        const val QUALITE = "QUALITE"
+        const val EQUILIBRE = "EQUILIBRE"
+        const val ECONOMIE = "ECONOMIE"
+    }
+
+    private val GAMMES = mapOf(
+        Niveau.QUALITE to listOf("opus", "fable"),
+        Niveau.EQUILIBRE to listOf("sonnet"),
+        Niveau.ECONOMIE to listOf("haiku", "mini", "flash"),
+    )
+
+    /** Numéro de version d'un identifiant (« claude-opus-5-5 » -> [5, 5]). */
+    fun versionDe(modele: String): List<Int> =
+        Regex("""claude-[a-z]+(?:-\d+(?:\.\d+)?)+""").find(modele)?.value
+            ?.split("-")
+            ?.mapNotNull { it.toIntOrNull() }
+            .orEmpty()
+
+    fun comparerVersions(a: List<Int>, b: List<Int>): Int {
+        for (i in 0 until maxOf(a.size, b.size)) {
+            val va = a.getOrElse(i) { 0 }
+            val vb = b.getOrElse(i) { 0 }
+            if (va != vb) return va.compareTo(vb)
+        }
+        return 0
+    }
+
+    /**
+     * Choisit, dans la liste réelle du fournisseur, le meilleur modèle de chaque
+     * gamme : le plus récent des « opus » pour la qualité, des « sonnet » pour
+     * l'équilibre, des « haiku » pour l'économie.
+     */
+    fun classerModeles(liste: List<String>): Map<String, String> {
+        val choix = mutableMapOf<String, String>()
+        for ((niveau, gammes) in GAMMES) {
+            val candidats = liste.filter { modele ->
+                gammes.any { gamme -> modele.contains(gamme, ignoreCase = true) }
+            }
+            choix[niveau] = candidats.maxWithOrNull { a, b -> comparerVersions(versionDe(a), versionDe(b)) }
+                ?: ""
+        }
+        return choix
+    }
+
+    fun libelleNiveau(niveau: String): String = when (niveau) {
+        Niveau.QUALITE -> "Qualité maximale"
+        Niveau.EQUILIBRE -> "Équilibré"
+        Niveau.ECONOMIE -> "Économique"
+        else -> niveau
+    }
     private const val TIMEOUT_MS = 25_000
 
     data class Resultat(
@@ -87,6 +142,7 @@ object ClaudeClient {
         articles: List<Article>,
         baseUrl: String = BASE,
         compatibleOpenAi: Boolean = false,
+        niveau: String = Niveau.QUALITE,
     ): Result<List<PropositionLigne>> = withContext(Dispatchers.IO) {
         runCatching {
             val catalogue = extraitCatalogue(articles)
@@ -94,7 +150,7 @@ object ClaudeClient {
             // l'artisan ne peut pas interpréter : on demande la liste au
             // fournisseur quand aucun modèle n'est enregistré.
             val modeleEffectif = modele.ifBlank {
-                if (compatibleOpenAi) MODELE_DEFAUT else resoudreModele(cle, baseUrl)
+                if (compatibleOpenAi) MODELE_DEFAUT else resoudreModele(cle, baseUrl, niveau)
             }
             val reponse = if (compatibleOpenAi) {
                 requeteCompatibleOpenAi(baseUrl, cle, modeleEffectif, texte, catalogue)
@@ -301,13 +357,18 @@ object ClaudeClient {
     }
 
     /**
-     * Choisit un modèle disponible chez le fournisseur : le petit modèle de la
-     * gamme « haiku » quand il existe, sinon le premier de la liste.
+     * Résout le modèle à utiliser pour un niveau de qualité donné, à partir de
+     * la liste réellement proposée par le fournisseur.
      */
-    suspend fun resoudreModele(cle: String, baseUrl: String = BASE): String {
+    suspend fun resoudreModele(
+        cle: String,
+        baseUrl: String = BASE,
+        niveau: String = Niveau.QUALITE,
+    ): String {
         val liste = listerModeles(cle, baseUrl).getOrNull().orEmpty()
-        return liste.firstOrNull { it.contains("haiku", ignoreCase = true) }
-            ?: liste.firstOrNull { it.contains("mini", ignoreCase = true) }
+        val classe = classerModeles(liste)
+        return classe[niveau]?.takeIf { it.isNotBlank() }
+            ?: classe[Niveau.QUALITE]?.takeIf { it.isNotBlank() }
             ?: liste.firstOrNull()
             ?: MODELE_DEFAUT
     }

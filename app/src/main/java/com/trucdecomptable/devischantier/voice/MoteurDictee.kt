@@ -49,6 +49,7 @@ object MoteurDictee {
             articles = articles,
             baseUrl = reglages.iaBaseUrl.ifBlank { ClaudeClient.BASE },
             compatibleOpenAi = reglages.iaFournisseur == "AUTRE",
+            niveau = reglages.iaNiveau,
         )
 
         return reponse.fold(

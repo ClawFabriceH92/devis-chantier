@@ -157,6 +157,59 @@ def cmd_swipe_haut():
     return 0
 
 
+def cmd_form(etiquette, valeur):
+    """Remplit le champ de saisie associé à un libellé, en vérifiant le résultat.
+
+    Les bornes bougent quand le libellé « flotte » : on relit le dump juste
+    avant de taper, et on recommence une fois si la valeur n'est pas arrivée.
+    """
+    for tentative in range(1, 4):
+        racine = dump_xml()
+        champs = [n for n in racine.iter("node") if (n.get("class") or "").endswith("EditText")]
+        libelles = [
+            n for n in racine.iter("node")
+            if (n.get("text") or "").strip() == etiquette
+        ]
+        if not libelles or not champs:
+            print(f"KO  champ « {etiquette} » introuvable (essai {tentative})")
+            return 1
+        lab = bornes(libelles[0])
+        centre = (lab[1] + lab[3]) // 2
+        cible = min(champs, key=lambda n: abs(((bornes(n)[1] + bornes(n)[3]) // 2) - centre))
+        b = bornes(cible)
+        x, y = (b[0] + b[2]) // 2, (b[1] + b[3]) // 2
+        adb("shell", "input", "tap", str(x), str(y))
+        subprocess.run(["sleep", "1"], check=False)
+        adb("shell", "input", "keyevent", "123")
+        for _ in range(len((cible.get("text") or "")) + 6):
+            adb("shell", "input", "keyevent", "67")
+        adb("shell", "input", "text", valeur.replace(" ", "%s"))
+        subprocess.run(["sleep", "1"], check=False)
+        adb("shell", "input", "keyevent", "4")
+        subprocess.run(["sleep", "1"], check=False)
+        apres = dump_xml()
+        textes = [n.get("text") or "" for n in apres.iter("node")]
+        attendu = valeur.replace("%s", " ")
+        if any(attendu.lower() in t.lower() for t in textes):
+            print(f"OK  « {etiquette} » = {attendu}")
+            return 0
+        print(f"    valeur non reçue (essai {tentative}), nouvelle tentative")
+    print(f"KO  impossible de remplir « {etiquette} »")
+    return 1
+
+
+def cmd_defiler_vers(texte, max_essais=8):
+    """Fait défiler jusqu'à ce que le texte soit visible (listes et formulaires longs)."""
+    for essai in range(1, max_essais + 1):
+        racine = dump_xml()
+        if trouver(racine, texte) is not None:
+            print(f"OK  « {texte} » visible après {essai - 1} défilement(s)")
+            return 0
+        cmd_swipe_haut()
+    print(f"KO  « {texte} » reste introuvable après défilement")
+    return 1
+
+
 def cmd_back():
     adb("shell", "input", "keyevent", "4")
     subprocess.run(["sleep", "1"], check=False)
@@ -180,6 +233,10 @@ def principal():
         return cmd_swipe_haut()
     if commande == "back":
         return cmd_back()
+    if commande == "form":
+        return cmd_form(sys.argv[2], sys.argv[3])
+    if commande == "defiler":
+        return cmd_defiler_vers(sys.argv[2])
     print(f"commande inconnue : {commande}")
     return 2
 

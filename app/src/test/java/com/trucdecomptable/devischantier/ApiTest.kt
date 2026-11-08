@@ -190,6 +190,44 @@ class ApiTest {
     }
 
     @Test
+    fun le_meilleur_modele_est_choisi_par_gamme() {
+        val liste = listOf(
+            "claude-haiku-5-5",
+            "claude-sonnet-5-5",
+            "claude-opus-5-5",
+            "claude-opus-5",
+            "claude-opus-4-8",
+            "claude-haiku-4-5-20251001",
+            "claude-sonnet-4-5-20250929",
+        )
+        val classe = ClaudeClient.classerModeles(liste)
+        assertEquals("claude-opus-5-5", classe[ClaudeClient.Niveau.QUALITE])
+        assertEquals("claude-sonnet-5-5", classe[ClaudeClient.Niveau.EQUILIBRE])
+        assertEquals("claude-haiku-5-5", classe[ClaudeClient.Niveau.ECONOMIE])
+    }
+
+    @Test
+    fun une_gamme_absente_donne_une_chaine_vide() {
+        val classe = ClaudeClient.classerModeles(listOf("claude-haiku-5-5"))
+        assertEquals("", classe[ClaudeClient.Niveau.QUALITE])
+        assertEquals("claude-haiku-5-5", classe[ClaudeClient.Niveau.ECONOMIE])
+    }
+
+    @Test
+    fun les_numeros_de_version_sont_lus_et_compares() {
+        assertEquals(listOf(5, 5), ClaudeClient.versionDe("claude-opus-5-5"))
+        assertEquals(listOf(4, 5, 20251101), ClaudeClient.versionDe("claude-opus-4-5-20251101"))
+        assertTrue(ClaudeClient.comparerVersions(listOf(5, 5), listOf(4, 8)) > 0)
+        assertTrue(ClaudeClient.comparerVersions(listOf(4, 5, 20251101), listOf(4, 8)) < 0)
+    }
+
+    @Test
+    fun le_defaut_est_bien_un_modele_du_haut_de_gamme() {
+        assertEquals("claude-opus-5-5", ClaudeClient.MODELE_DEFAUT)
+        assertEquals("Qualité maximale", ClaudeClient.libelleNiveau(ClaudeClient.Niveau.QUALITE))
+    }
+
+    @Test
     fun modeles_sont_lus_depuis_le_fournisseur() {
         val corps = """{"data":[{"id":"claude-haiku-4-5"},{"id":"claude-sonnet-4-5"}]}"""
         assertEquals(listOf("claude-haiku-4-5", "claude-sonnet-4-5"), ClaudeClient.parseModeles(corps))

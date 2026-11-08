@@ -407,9 +407,10 @@ fun EcranReglages(
                                                 // L'identifiant enregistré peut avoir été retiré :
                                                 // on garde celui de la liste s'il n'y figure plus.
                                                 if (liste.isNotEmpty() && liste.none { it == reglages.iaModele }) {
-                                                    reglages.iaModele = liste.firstOrNull {
-                                                        it.contains("haiku", ignoreCase = true)
-                                                    } ?: liste.first()
+                                                    reglages.iaModele =
+                                                        ClaudeClient.classerModeles(liste)[reglages.iaNiveau]
+                                                            ?.takeIf { it.isNotBlank() }
+                                                            ?: liste.first()
                                                 }
                                                 "Clé valide. Modèle utilisé : ${reglages.iaModele}"
                                             },
@@ -427,10 +428,33 @@ fun EcranReglages(
                     Spacer(Modifier.height(6.dp))
                     BlocAlerte(testCle)
                 }
+                Text(
+                    "Niveau de qualité : ${ClaudeClient.libelleNiveau(reglages.iaNiveau)}",
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    BoutonSecondaire(
+                        "Qualité maximale",
+                        onClick = { reglages.iaNiveau = ClaudeClient.Niveau.QUALITE; reglages.iaModele = ""; rafraichir() },
+                        modifier = Modifier.weight(1f),
+                    )
+                    BoutonSecondaire(
+                        "Équilibré",
+                        onClick = { reglages.iaNiveau = ClaudeClient.Niveau.EQUILIBRE; reglages.iaModele = ""; rafraichir() },
+                        modifier = Modifier.weight(1f),
+                    )
+                    BoutonSecondaire(
+                        "Économique",
+                        onClick = { reglages.iaNiveau = ClaudeClient.Niveau.ECONOMIE; reglages.iaModele = ""; rafraichir() },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
                 ChampTexte(
-                    "Modèle (laisser vide pour le défaut ${ClaudeClient.MODELE_DEFAUT})",
+                    "Modèle (vide = le meilleur du niveau, choisi chez le fournisseur)",
                     reglages.iaModele,
                     onValeur = { reglages.iaModele = it },
+                    aide = "Le modèle réellement retenu est relu dans la liste du fournisseur : " +
+                        "les identifiants changent souvent.",
                 )
                 if (modeles.isNotEmpty()) {
                     Text(
@@ -438,7 +462,7 @@ fun EcranReglages(
                         style = MaterialTheme.typography.bodyMedium,
                         color = Couleurs.gris,
                     )
-                    modeles.take(8).forEach { modele ->
+                    modeles.take(10).forEach { modele ->
                         BoutonSecondaire(
                             (if (reglages.iaModele == modele) "✓ " else "") + modele,
                             onClick = { reglages.iaModele = modele; rafraichir() },
@@ -462,6 +486,7 @@ fun EcranReglages(
                                     articles = articles,
                                     baseUrl = reglages.iaBaseUrl.ifBlank { ClaudeClient.BASE },
                                     compatibleOpenAi = reglages.iaFournisseur == "AUTRE",
+                                    niveau = reglages.iaNiveau,
                                 )
                                 withContext(Dispatchers.Main) {
                                     testCle = resultat.fold(
