@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bleu">#0F3D5C</color>
+    <color name="bleu_clair">#2E7DAF</color>
+    <color name="orange">#E4761B</color>
+    <color name="sable">#F5F2EC</color>
+    <color name="blanc">#FFFFFF</color>
+    <color name="gris">#6E7A80</color>
+    <color name="rouge">#B3261E</color>
+    <color name="vert">#1B6B4A</color>
+</resources>

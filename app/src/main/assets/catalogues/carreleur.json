@@ -1,0 +1,118 @@
+{
+ "metier": "Carreleur",
+ "familles": [
+  {
+   "nom": "Carrelage",
+   "sousFamilles": [
+    {
+     "nom": "Fournitures",
+     "articles": [
+      {
+       "libelle": "Carrelage grès cérame 60x60",
+       "unite": "m²",
+       "prix_ht": 32.0,
+       "tva": 10.0,
+       "nature": "fourniture",
+       "synonymes": "carrelage, gres cerame, 60x60"
+      },
+      {
+       "libelle": "Faïence murale 25x40",
+       "unite": "m²",
+       "prix_ht": 24.0,
+       "tva": 10.0,
+       "nature": "fourniture",
+       "synonymes": "faience, murale"
+      },
+      {
+       "libelle": "Colle à carrelage 25 kg",
+       "unite": "u",
+       "prix_ht": 18.0,
+       "tva": 10.0,
+       "nature": "fourniture",
+       "synonymes": "colle, mortier colle"
+      },
+      {
+       "libelle": "Joint hydrofuge 5 kg",
+       "unite": "u",
+       "prix_ht": 16.0,
+       "tva": 10.0,
+       "nature": "fourniture",
+       "synonymes": "joint, hydrofuge"
+      },
+      {
+       "libelle": "Plinthe carrelage",
+       "unite": "ml",
+       "prix_ht": 9.5,
+       "tva": 10.0,
+       "nature": "fourniture",
+       "synonymes": "plinthe"
+      }
+     ]
+    },
+    {
+     "nom": "Prestations",
+     "articles": [
+      {
+       "libelle": "Pose de carrelage au sol",
+       "unite": "m²",
+       "prix_ht": 38.0,
+       "tva": 10.0,
+       "nature": "main-d'oeuvre",
+       "synonymes": "pose carrelage, sol"
+      },
+      {
+       "libelle": "Pose de faïence murale",
+       "unite": "m²",
+       "prix_ht": 45.0,
+       "tva": 10.0,
+       "nature": "main-d'oeuvre",
+       "synonymes": "pose faience, mur"
+      },
+      {
+       "libelle": "Ragréage 5 mm",
+       "unite": "m²",
+       "prix_ht": 12.0,
+       "tva": 10.0,
+       "nature": "main-d'oeuvre",
+       "synonymes": "ragreage, ragreage sol"
+      },
+      {
+       "libelle": "Dépose de carrelage existant",
+       "unite": "m²",
+       "prix_ht": 15.0,
+       "tva": 10.0,
+       "nature": "main-d'oeuvre",
+       "synonymes": "depose, demolation"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "nom": "Main-d'oeuvre",
+   "sousFamilles": [
+    {
+     "nom": "Prestations",
+     "articles": [
+      {
+       "libelle": "Main-d'oeuvre carrelage",
+       "unite": "h",
+       "prix_ht": 44.0,
+       "tva": 10.0,
+       "nature": "main-d'oeuvre",
+       "synonymes": "heure carreleur, main d'oeuvre"
+      },
+      {
+       "libelle": "Déplacement",
+       "unite": "forfait",
+       "prix_ht": 30.0,
+       "tva": 20.0,
+       "nature": "deplacement",
+       "synonymes": "deplacement, trajet"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

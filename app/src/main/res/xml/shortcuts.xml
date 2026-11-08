@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Long press on the launcher icon: dictation first, which is what an artisan
+     asks for on a doorstep. One tap, not three. -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="dictee"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_micro"
+        android:shortcutShortLabel="@string/shortcut_dictee"
+        android:shortcutLongLabel="@string/shortcut_dictee_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="devischantier://dictee"
+            android:targetClass="com.trucdecomptable.devischantier.MainActivity"
+            android:targetPackage="com.trucdecomptable.devischantier" />
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="nouveau_devis"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_devis"
+        android:shortcutShortLabel="@string/shortcut_devis"
+        android:shortcutLongLabel="@string/shortcut_devis_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="devischantier://nouveau"
+            android:targetClass="com.trucdecomptable.devischantier.MainActivity"
+            android:targetPackage="com.trucdecomptable.devischantier" />
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
+</shortcuts>

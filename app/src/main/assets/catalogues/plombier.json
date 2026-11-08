@@ -1,0 +1,155 @@
+{
+ "metier": "Plombier",
+ "familles": [
+  {
+   "nom": "Plomberie",
+   "sousFamilles": [
+    {
+     "nom": "Robinetterie",
+     "articles": [
+      {
+       "libelle": "Mitigeur lavabo",
+       "unite": "u",
+       "prix_ht": 85.0,
+       "tva": 10.0,
+       "nature": "fourniture",
+       "synonymes": "mitigeur, robinet melangeur, robinet lavabo"
+      },
+      {
+       "libelle": "Mitigeur douche",
+       "unite": "u",
+       "prix_ht": 120.0,
+       "tva": 10.0,
+       "nature": "fourniture",
+       "synonymes": "mitigeur douche, pommeau, colonne"
+      },
+      {
+       "libelle": "Robinet de cuisine",
+       "unite": "u",
+       "prix_ht": 110.0,
+       "tva": 10.0,
+       "nature": "fourniture",
+       "synonymes": "robinet evier, bec verseur"
+      },
+      {
+       "libelle": "Flexible inox 3/8",
+       "unite": "u",
+       "prix_ht": 8.5,
+       "tva": 10.0,
+       "nature": "fourniture",
+       "synonymes": "flexible, raccord souple"
+      },
+      {
+       "libelle": "Siphon lavabo",
+       "unite": "u",
+       "prix_ht": 12.0,
+       "tva": 10.0,
+       "nature": "fourniture",
+       "synonymes": "siphon, bonde"
+      }
+     ]
+    },
+    {
+     "nom": "Sanitaires",
+     "articles": [
+      {
+       "libelle": "WC suspendu complet",
+       "unite": "u",
+       "prix_ht": 320.0,
+       "tva": 10.0,
+       "nature": "fourniture",
+       "synonymes": "wc suspendu, cuvette suspendue, bati support"
+      },
+      {
+       "libelle": "Pose WC suspendu",
+       "unite": "u",
+       "prix_ht": 180.0,
+       "tva": 10.0,
+       "nature": "main-d'oeuvre",
+       "synonymes": "pose wc, installation wc"
+      },
+      {
+       "libelle": "Receveur de douche 90x90",
+       "unite": "u",
+       "prix_ht": 210.0,
+       "tva": 10.0,
+       "nature": "fourniture",
+       "synonymes": "receveur, bac douche"
+      },
+      {
+       "libelle": "Kit de raccordement WC",
+       "unite": "u",
+       "prix_ht": 25.0,
+       "tva": 10.0,
+       "nature": "fourniture",
+       "synonymes": "kit raccordement, raccord wc"
+      }
+     ]
+    },
+    {
+     "nom": "Réseau",
+     "articles": [
+      {
+       "libelle": "Tube cuivre 14/16",
+       "unite": "ml",
+       "prix_ht": 9.5,
+       "tva": 10.0,
+       "nature": "fourniture",
+       "synonymes": "tube cuivre, cuivre"
+      },
+      {
+       "libelle": "Tube PER 16",
+       "unite": "ml",
+       "prix_ht": 3.2,
+       "tva": 10.0,
+       "nature": "fourniture",
+       "synonymes": "per, tube per, multicouche"
+      },
+      {
+       "libelle": "Évacuation PVC 32",
+       "unite": "ml",
+       "prix_ht": 4.8,
+       "tva": 10.0,
+       "nature": "fourniture",
+       "synonymes": "pvc, evacuation"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "nom": "Main-d'oeuvre",
+   "sousFamilles": [
+    {
+     "nom": "Prestations",
+     "articles": [
+      {
+       "libelle": "Main-d'oeuvre plomberie",
+       "unite": "h",
+       "prix_ht": 48.0,
+       "tva": 10.0,
+       "nature": "main-d'oeuvre",
+       "synonymes": "heure plombier, main d'oeuvre"
+      },
+      {
+       "libelle": "Déplacement",
+       "unite": "forfait",
+       "prix_ht": 35.0,
+       "tva": 20.0,
+       "nature": "deplacement",
+       "synonymes": "deplacement, trajet, frais de route"
+      },
+      {
+       "libelle": "Recherche de fuite",
+       "unite": "forfait",
+       "prix_ht": 150.0,
+       "tva": 10.0,
+       "nature": "main-d'oeuvre",
+       "synonymes": "fuite, detection fuite"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

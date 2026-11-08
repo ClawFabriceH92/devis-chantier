@@ -1,0 +1,110 @@
+{
+ "metier": "Peintre",
+ "familles": [
+  {
+   "nom": "Peinture",
+   "sousFamilles": [
+    {
+     "nom": "Produits",
+     "articles": [
+      {
+       "libelle": "Peinture mate blanche 10 L",
+       "unite": "u",
+       "prix_ht": 65.0,
+       "tva": 10.0,
+       "nature": "fourniture",
+       "synonymes": "peinture, mat, blanc"
+      },
+      {
+       "libelle": "Sous-couche universelle 10 L",
+       "unite": "u",
+       "prix_ht": 45.0,
+       "tva": 10.0,
+       "nature": "fourniture",
+       "synonymes": "sous couche, primaire"
+      },
+      {
+       "libelle": "Enduit de rebouchage 5 kg",
+       "unite": "u",
+       "prix_ht": 22.0,
+       "tva": 10.0,
+       "nature": "fourniture",
+       "synonymes": "enduit, rebouchage"
+      },
+      {
+       "libelle": "Bâche de protection",
+       "unite": "u",
+       "prix_ht": 9.0,
+       "tva": 10.0,
+       "nature": "fourniture",
+       "synonymes": "bache, protection"
+      }
+     ]
+    },
+    {
+     "nom": "Prestations",
+     "articles": [
+      {
+       "libelle": "Préparation des murs",
+       "unite": "m²",
+       "prix_ht": 8.5,
+       "tva": 10.0,
+       "nature": "main-d'oeuvre",
+       "synonymes": "preparation, ratissage, poncage"
+      },
+      {
+       "libelle": "Peinture murs deux couches",
+       "unite": "m²",
+       "prix_ht": 14.0,
+       "tva": 10.0,
+       "nature": "main-d'oeuvre",
+       "synonymes": "peinture murs, deux couches"
+      },
+      {
+       "libelle": "Peinture plafond",
+       "unite": "m²",
+       "prix_ht": 17.0,
+       "tva": 10.0,
+       "nature": "main-d'oeuvre",
+       "synonymes": "plafond, peinture plafond"
+      },
+      {
+       "libelle": "Pose de toile de verre",
+       "unite": "m²",
+       "prix_ht": 12.0,
+       "tva": 10.0,
+       "nature": "main-d'oeuvre",
+       "synonymes": "toile de verre, revetement"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "nom": "Main-d'oeuvre",
+   "sousFamilles": [
+    {
+     "nom": "Prestations",
+     "articles": [
+      {
+       "libelle": "Main-d'oeuvre peinture",
+       "unite": "h",
+       "prix_ht": 42.0,
+       "tva": 10.0,
+       "nature": "main-d'oeuvre",
+       "synonymes": "heure peintre, main d'oeuvre"
+      },
+      {
+       "libelle": "Déplacement",
+       "unite": "forfait",
+       "prix_ht": 30.0,
+       "tva": 20.0,
+       "nature": "deplacement",
+       "synonymes": "deplacement, trajet"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

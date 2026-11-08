@@ -1,0 +1,110 @@
+{
+ "metier": "Menuisier",
+ "familles": [
+  {
+   "nom": "Menuiserie",
+   "sousFamilles": [
+    {
+     "nom": "Fenêtres et portes",
+     "articles": [
+      {
+       "libelle": "Fenêtre PVC double vitrage 100x120",
+       "unite": "u",
+       "prix_ht": 380.0,
+       "tva": 10.0,
+       "nature": "fourniture",
+       "synonymes": "fenetre, pvc, double vitrage"
+      },
+      {
+       "libelle": "Porte d'entrée aluminium",
+       "unite": "u",
+       "prix_ht": 1250.0,
+       "tva": 10.0,
+       "nature": "fourniture",
+       "synonymes": "porte entree, alu"
+      },
+      {
+       "libelle": "Porte intérieure alvéolaire",
+       "unite": "u",
+       "prix_ht": 145.0,
+       "tva": 10.0,
+       "nature": "fourniture",
+       "synonymes": "porte interieure, alveolaire"
+      },
+      {
+       "libelle": "Pose de fenêtre",
+       "unite": "u",
+       "prix_ht": 190.0,
+       "tva": 10.0,
+       "nature": "main-d'oeuvre",
+       "synonymes": "pose fenetre, installation"
+      },
+      {
+       "libelle": "Pose de porte intérieure",
+       "unite": "u",
+       "prix_ht": 160.0,
+       "tva": 10.0,
+       "nature": "main-d'oeuvre",
+       "synonymes": "pose porte, installation porte"
+      }
+     ]
+    },
+    {
+     "nom": "Agencement",
+     "articles": [
+      {
+       "libelle": "Plan de travail stratifié",
+       "unite": "ml",
+       "prix_ht": 95.0,
+       "tva": 10.0,
+       "nature": "fourniture",
+       "synonymes": "plan de travail, stratifie"
+      },
+      {
+       "libelle": "Étagère sur mesure",
+       "unite": "u",
+       "prix_ht": 130.0,
+       "tva": 10.0,
+       "nature": "fourniture",
+       "synonymes": "etagere, rayonnage"
+      },
+      {
+       "libelle": "Quincaillerie et visserie",
+       "unite": "forfait",
+       "prix_ht": 25.0,
+       "tva": 10.0,
+       "nature": "fourniture",
+       "synonymes": "visserie, quincaillerie"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "nom": "Main-d'oeuvre",
+   "sousFamilles": [
+    {
+     "nom": "Prestations",
+     "articles": [
+      {
+       "libelle": "Main-d'oeuvre menuiserie",
+       "unite": "h",
+       "prix_ht": 46.0,
+       "tva": 10.0,
+       "nature": "main-d'oeuvre",
+       "synonymes": "heure menuisier, main d'oeuvre"
+      },
+      {
+       "libelle": "Déplacement",
+       "unite": "forfait",
+       "prix_ht": 30.0,
+       "tva": 20.0,
+       "nature": "deplacement",
+       "synonymes": "deplacement, trajet"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

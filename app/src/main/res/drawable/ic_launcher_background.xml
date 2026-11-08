@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#0F3D5C"
+        android:pathData="M0,0 h108 v108 h-108 z" />
+    <!-- a soft band so the icon is not a flat square on the launcher -->
+    <path
+        android:fillColor="#164F73"
+        android:pathData="M0,74 C30,62 72,92 108,70 L108,108 L0,108 Z" />
+</vector>

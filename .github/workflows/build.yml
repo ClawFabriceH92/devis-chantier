@@ -1,0 +1,169 @@
+name: Build APK
+
+on:
+  push:
+    branches: [ master, main ]
+    paths:
+      - 'app/**'
+      - 'gradle/**'
+      - '.github/workflows/**'
+      - 'scripts/**'
+  pull_request:
+    branches: [ master, main ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      DEVISCHANTIER_KEYSTORE_B64: ${{ secrets.DEVISCHANTIER_KEYSTORE_B64 }}
+      DEVISCHANTIER_KEYSTORE_PASSWORD: ${{ secrets.DEVISCHANTIER_KEYSTORE_PASSWORD }}
+      DEVISCHANTIER_KEY_PASSWORD: ${{ secrets.DEVISCHANTIER_KEY_PASSWORD }}
+      DEVISCHANTIER_KEY_ALIAS: ${{ secrets.DEVISCHANTIER_KEY_ALIAS }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      # L'action par défaut demande encore le paquet « tools », retiré du dépôt
+      # Google : sans cette liste, le job échoue avant toute compilation.
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ hashFiles('**/*.gradle.kts', 'gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: gradle-
+
+      - name: Unit tests
+        run: ./gradlew testDebugUnitTest --no-daemon
+
+      # « 0 test trouvé » sort aussi en 0 : ce garde-fou compte les XML JUnit.
+      - name: Assert unit tests actually ran
+        run: |
+          python3 - <<'EOF'
+          import glob, sys, xml.etree.ElementTree as ET
+          files = glob.glob('app/build/test-results/**/*.xml', recursive=True)
+          total = sum(int(ET.parse(f).getroot().get('tests', 0)) for f in files)
+          print(f'{len(files)} classe(s) de test, {total} test(s) unitaires')
+          if total < 100:
+              sys.exit(f'Trop peu de tests exécutés ({total})')
+          EOF
+
+      - name: Build release APK
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Verify signature
+        run: |
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | tail -1)
+          "$BT/apksigner" verify --print-certs app/build/outputs/apk/release/app-release.apk | head -5
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: devis-chantier-apk
+          path: app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+
+      - name: Publish "latest" release
+        if: github.event_name != 'pull_request'
+        run: |
+          VER=$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts)
+          APK=app/build/outputs/apk/release/app-release.apk
+          # Créer une fois, puis écraser l'asset : l'URL de téléchargement ne
+          # renvoie jamais 404 entre deux builds.
+          gh release view latest >/dev/null 2>&1 || \
+            gh release create latest --title "Devis Chantier v${VER}" --notes "Build automatique - v${VER}"
+          gh release edit latest --title "Devis Chantier v${VER}" --notes "Build automatique - v${VER}"
+          for i in 1 2 3 4 5; do
+            gh release upload latest "$APK" --clobber && break
+            sleep 10
+          done
+          # version.json est publié APRÈS l'APK : le manifeste n'annonce jamais
+          # une version dont l'asset n'est pas encore là.
+          printf '{"version":"%s","notes":"Build automatique - v%s","apk":"%s"}\n' \
+            "$VER" "$VER" \
+            "https://github.com/${GITHUB_REPOSITORY}/releases/download/latest/app-release.apk" \
+            > "$RUNNER_TEMP/version.json"
+          for i in 1 2 3 4 5; do
+            gh release upload latest "$RUNNER_TEMP/version.json" --clobber && break
+            sleep 10
+          done
+          gh release view latest --json assets -q '.assets[].name' \
+            | grep -vx -e 'app-release.apk' -e 'version.json' \
+            | while read -r stale; do gh release delete-asset latest "$stale" -y || true; done
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  emulator:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ hashFiles('**/*.gradle.kts', 'gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: gradle-
+
+      # La QA visuelle passe par l'émulateur : aucun appareil local ici.
+      - name: Build debug APK
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Smoke test on emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: bash scripts/smoke-test.sh
+
+      - name: Upload emulator screenshots and dumps
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: devis-chantier-captures
+          path: /tmp/smoke/*.png
+          if-no-files-found: warn

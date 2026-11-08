@@ -1,0 +1,110 @@
+{
+ "metier": "Électricien",
+ "familles": [
+  {
+   "nom": "Électricité",
+   "sousFamilles": [
+    {
+     "nom": "Appareillage",
+     "articles": [
+      {
+       "libelle": "Prise 16 A encastrée",
+       "unite": "u",
+       "prix_ht": 12.5,
+       "tva": 10.0,
+       "nature": "fourniture",
+       "synonymes": "prise, prise electrique"
+      },
+      {
+       "libelle": "Interrupteur va-et-vient",
+       "unite": "u",
+       "prix_ht": 11.0,
+       "tva": 10.0,
+       "nature": "fourniture",
+       "synonymes": "interrupteur, va et vient"
+      },
+      {
+       "libelle": "Disjoncteur 16 A",
+       "unite": "u",
+       "prix_ht": 18.0,
+       "tva": 10.0,
+       "nature": "fourniture",
+       "synonymes": "disjoncteur, protection"
+      },
+      {
+       "libelle": "Tableau électrique 2 rangées",
+       "unite": "u",
+       "prix_ht": 180.0,
+       "tva": 10.0,
+       "nature": "fourniture",
+       "synonymes": "tableau, coffret"
+      }
+     ]
+    },
+    {
+     "nom": "Câblage",
+     "articles": [
+      {
+       "libelle": "Câble 3G2,5",
+       "unite": "ml",
+       "prix_ht": 2.4,
+       "tva": 10.0,
+       "nature": "fourniture",
+       "synonymes": "cable, gaine"
+      },
+      {
+       "libelle": "Gaine ICTA 20",
+       "unite": "ml",
+       "prix_ht": 1.1,
+       "tva": 10.0,
+       "nature": "fourniture",
+       "synonymes": "gaine, icta"
+      },
+      {
+       "libelle": "Point lumineux complet",
+       "unite": "u",
+       "prix_ht": 65.0,
+       "tva": 10.0,
+       "nature": "main-d'oeuvre",
+       "synonymes": "point lumineux, eclairage"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "nom": "Main-d'oeuvre",
+   "sousFamilles": [
+    {
+     "nom": "Prestations",
+     "articles": [
+      {
+       "libelle": "Main-d'oeuvre électricité",
+       "unite": "h",
+       "prix_ht": 52.0,
+       "tva": 10.0,
+       "nature": "main-d'oeuvre",
+       "synonymes": "heure electricien, main d'oeuvre"
+      },
+      {
+       "libelle": "Mise aux normes NF C 15-100",
+       "unite": "forfait",
+       "prix_ht": 480.0,
+       "tva": 10.0,
+       "nature": "main-d'oeuvre",
+       "synonymes": "mise aux normes, nf c 15 100"
+      },
+      {
+       "libelle": "Déplacement",
+       "unite": "forfait",
+       "prix_ht": 35.0,
+       "tva": 20.0,
+       "nature": "deplacement",
+       "synonymes": "deplacement, trajet"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

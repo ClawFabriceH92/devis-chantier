@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Devis Chantier</string>
+    <string name="shortcut_dictee">Devis vocal</string>
+    <string name="shortcut_dictee_long">Nouveau devis vocal</string>
+    <string name="shortcut_devis">Nouveau devis</string>
+    <string name="shortcut_devis_long">Nouveau devis (saisie)</string>
+</resources>

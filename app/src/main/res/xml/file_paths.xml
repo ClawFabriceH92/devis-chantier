@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <files-path name="devis" path="devis/" />
+    <files-path name="exports" path="exports/" />
+    <files-path name="sauvegardes" path="sauvegardes/" />
+    <files-path name="updates" path="updates/" />
+    <files-path name="attestations" path="attestations/" />
+    <cache-path name="photos" path="photos/" />
+    <cache-path name="tmp" path="." />
+</paths>
