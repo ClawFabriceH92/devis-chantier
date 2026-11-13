@@ -103,7 +103,7 @@ object Catalogues {
                             familleId = idSous,
                             libelle = article.libelle,
                             unite = article.unite,
-                            prixHT = (article.prixHT * facteur * 100).toLong() / 100.0,
+                            prixHT = com.trucdecomptable.devischantier.util.Formats.arrondi2(article.prixHT * facteur),
                             tauxTva = article.tauxTva,
                             nature = article.nature,
                             synonymes = article.synonymes,

@@ -33,9 +33,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.trucdecomptable.devischantier.BuildConfig
-import com.trucdecomptable.devischantier.api.ClaudeClient
 import com.trucdecomptable.devischantier.api.RechercheEntreprises
-import com.trucdecomptable.devischantier.data.Coffre
 import com.trucdecomptable.devischantier.data.Declencheur
 import com.trucdecomptable.devischantier.data.Dao
 import com.trucdecomptable.devischantier.data.Reglages
@@ -66,12 +64,12 @@ fun EcranReglages(
     var message by remember { mutableStateOf("") }
     var rechercheEntreprise by remember { mutableStateOf("") }
     var resultats by remember { mutableStateOf<List<com.trucdecomptable.devischantier.api.EntrepriseResultat>>(emptyList()) }
-    var cleSaisie by remember { mutableStateOf("") }
-    var testCle by remember { mutableStateOf("") }
-    var modeles by remember { mutableStateOf<List<String>>(emptyList()) }
     var motDePasse by remember { mutableStateOf("") }
     var majEtat by remember { mutableStateOf("") }
 
+    // Les réglages vivent dans SharedPreferences, qui ne notifie pas Compose :
+    // chaque modification incrémente `version`, lue ci-dessous, pour que
+    // l'écran se redessine avec les valeurs à jour.
     fun rafraichir() {
         version++
     }
@@ -134,11 +132,23 @@ fun EcranReglages(
                     Sauvegarde.restaurer(contexte, octets, motDePasse)
                 }
                 withContext(Dispatchers.Main) { message = resultat.message }
+                if (resultat.ok) {
+                    // Les écrans tiennent encore l'ancienne base : on relance
+                    // l'application proprement plutôt que de la laisser planter.
+                    delay(1500)
+                    val relance = contexte.packageManager.getLaunchIntentForPackage(contexte.packageName)
+                        ?.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                    if (relance != null) contexte.startActivity(relance)
+                    Runtime.getRuntime().exit(0)
+                }
             }
         } else if (uri != null) {
             message = "Saisissez d'abord la phrase secrète de la sauvegarde."
         }
     }
+
+    @Suppress("UNUSED_VARIABLE")
+    val revision = version // lecture volontaire : voir rafraichir()
 
     Column(Modifier.fillMaxSize()) {
         EnTeteRetour("Réglages", onRetour)
@@ -348,190 +358,13 @@ fun EcranReglages(
             Spacer(Modifier.height(12.dp))
 
             // ------------------------------------------------------ IA
-            CarteBloc(titre = "Intelligence artificielle (dictée assistée)") {
-                Text(
-                    "Facultatif. Sans clé, la dictée fonctionne entièrement, sans compte ni abonnement. " +
-                        "Avec une clé, le texte dicté et un extrait du catalogue (libellés, prix de vente) " +
-                        "sont envoyés au fournisseur choisi. Les prix d'achat et les marges ne partent jamais.",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                Spacer(Modifier.height(8.dp))
-                BoutonSecondaire(
-                    if (reglages.iaFournisseur == "CLAUDE") "Fournisseur : Claude (Anthropic)" else "Fournisseur : autre (compatible OpenAI)",
-                    onClick = {
-                        reglages.iaFournisseur = if (reglages.iaFournisseur == "CLAUDE") "AUTRE" else "CLAUDE"
-                        rafraichir()
-                    },
-                )
-                if (reglages.iaFournisseur == "AUTRE") {
-                    ChampTexte(
-                        "Adresse de l'API (ex. https://…/v1)",
-                        reglages.iaBaseUrl,
-                        onValeur = { reglages.iaBaseUrl = it },
-                    )
-                }
-                ChampTexte(
-                    if (reglages.iaCle == null) "Clé API" else "Clé API (${Coffre.masquer(reglages.iaCle.orEmpty())})",
-                    cleSaisie,
-                    onValeur = { cleSaisie = it },
-                    aide = "La clé est chiffrée par le Keystore d'Android et n'est jamais incluse dans les sauvegardes.",
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    BoutonSecondaire(
-                        "Enregistrer la clé",
-                        onClick = {
-                            if (cleSaisie.isNotBlank()) {
-                                reglages.iaCle = cleSaisie
-                                reglages.iaConsentement = true
-                                cleSaisie = ""
-                                message = "Clé enregistrée (chiffrée)."
-                                rafraichir()
-                            }
-                        },
-                        modifier = Modifier.weight(1f),
-                    )
-                    BoutonSecondaire(
-                        "Tester la clé",
-                        onClick = {
-                            val cle = reglages.iaCle
-                            if (cle.isNullOrBlank()) {
-                                testCle = "Aucune clé enregistrée."
-                            } else {
-                                portee.launch(Dispatchers.IO) {
-                                    val base = reglages.iaBaseUrl.ifBlank { ClaudeClient.BASE }
-                                    val resultat = ClaudeClient.listerModeles(cle, base)
-                                    withContext(Dispatchers.Main) {
-                                        testCle = resultat.fold(
-                                            onSuccess = { liste ->
-                                                modeles = liste
-                                                // L'identifiant enregistré peut avoir été retiré :
-                                                // on garde celui de la liste s'il n'y figure plus.
-                                                if (liste.isNotEmpty() && liste.none { it == reglages.iaModele }) {
-                                                    reglages.iaModele =
-                                                        ClaudeClient.classerModeles(liste)[reglages.iaNiveau]
-                                                            ?.takeIf { it.isNotBlank() }
-                                                            ?: liste.first()
-                                                }
-                                                "Clé valide. Modèle utilisé : ${reglages.iaModele}"
-                                            },
-                                            onFailure = { "Échec : ${it.message}" },
-                                        )
-                                        rafraichir()
-                                    }
-                                }
-                            }
-                        },
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-                if (reglages.iaCleNonSecurisee) {
-                    Spacer(Modifier.height(6.dp))
-                    BlocAlerte(
-                        "Ce téléphone n'a pas de coffre sécurisé disponible : la clé fonctionne " +
-                            "pendant cette session mais n'est pas enregistrée. Elle sera à ressaisir " +
-                            "au prochain démarrage.",
-                        Couleurs.rouge,
-                    )
-                }
-                if (testCle.isNotBlank()) {
-                    Spacer(Modifier.height(6.dp))
-                    BlocAlerte(testCle)
-                }
-                Text(
-                    "Niveau de qualité : ${ClaudeClient.libelleNiveau(reglages.iaNiveau)}",
-                    style = MaterialTheme.typography.bodyLarge,
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    BoutonSecondaire(
-                        "Qualité maximale",
-                        onClick = { reglages.iaNiveau = ClaudeClient.Niveau.QUALITE; reglages.iaModele = ""; rafraichir() },
-                        modifier = Modifier.weight(1f),
-                    )
-                    BoutonSecondaire(
-                        "Équilibré",
-                        onClick = { reglages.iaNiveau = ClaudeClient.Niveau.EQUILIBRE; reglages.iaModele = ""; rafraichir() },
-                        modifier = Modifier.weight(1f),
-                    )
-                    BoutonSecondaire(
-                        "Économique",
-                        onClick = { reglages.iaNiveau = ClaudeClient.Niveau.ECONOMIE; reglages.iaModele = ""; rafraichir() },
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-                ChampTexte(
-                    "Modèle (vide = le meilleur du niveau, choisi chez le fournisseur)",
-                    reglages.iaModele,
-                    onValeur = { reglages.iaModele = it },
-                    aide = "Le modèle réellement retenu est relu dans la liste du fournisseur : " +
-                        "les identifiants changent souvent.",
-                )
-                if (modeles.isNotEmpty()) {
-                    Text(
-                        "Modèles disponibles chez le fournisseur (appuyez pour choisir) :",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Couleurs.gris,
-                    )
-                    modeles.take(10).forEach { modele ->
-                        BoutonSecondaire(
-                            (if (reglages.iaModele == modele) "✓ " else "") + modele,
-                            onClick = { reglages.iaModele = modele; rafraichir() },
-                            modifier = Modifier.padding(vertical = 2.dp),
-                        )
-                    }
-                }
-                BoutonSecondaire(
-                    "Tester la dictée assistée",
-                    onClick = {
-                        val cle = reglages.iaCle
-                        if (cle.isNullOrBlank()) {
-                            testCle = "Aucune clé enregistrée : la dictée fonctionne en mode gratuit."
-                        } else {
-                            portee.launch(Dispatchers.IO) {
-                                val articles = dao.articlesListe().take(20)
-                                val resultat = ClaudeClient.extraireLignes(
-                                    cle = cle,
-                                    modele = reglages.iaModele,
-                                    texte = "deux mitigeurs lavabo et trois heures de main d'oeuvre",
-                                    articles = articles,
-                                    baseUrl = reglages.iaBaseUrl.ifBlank { ClaudeClient.BASE },
-                                    compatibleOpenAi = reglages.iaFournisseur == "AUTRE",
-                                    niveau = reglages.iaNiveau,
-                                )
-                                withContext(Dispatchers.Main) {
-                                    testCle = resultat.fold(
-                                        onSuccess = { propositions ->
-                                            if (propositions.isEmpty()) {
-                                                "Appel réussi, aucune ligne proposée (réponse illisible ?)."
-                                            } else {
-                                                "Appel réussi : " + propositions.joinToString(" · ") {
-                                                    "${it.ligne.quantite} ${it.ligne.unite ?: "u"} ${it.ligne.designation}"
-                                                }
-                                            }
-                                        },
-                                        onFailure = { "Échec : ${it.message}" },
-                                    )
-                                    rafraichir()
-                                }
-                            }
-                        }
-                    },
-                )
-                Text(
-                    "Dictées assistées par l'IA : ${reglages.iaDictees}",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                if (reglages.iaCle != null) {
-                    BoutonSecondaire(
-                        "Supprimer la clé",
-                        onClick = {
-                            reglages.iaCle = null
-                            reglages.iaConsentement = false
-                            message = "Clé supprimée. Retour au mode gratuit."
-                            rafraichir()
-                        },
-                    )
-                }
-            }
+            SectionIntelligenceArtificielle(
+                contexte = contexte,
+                dao = dao,
+                reglages = reglages,
+                rafraichir = { rafraichir() },
+                onMessage = { message = it },
+            )
             Spacer(Modifier.height(12.dp))
 
             // ------------------------------------------------ notifications

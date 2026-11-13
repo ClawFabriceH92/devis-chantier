@@ -67,6 +67,8 @@ import com.trucdecomptable.devischantier.util.Diag
 import com.trucdecomptable.devischantier.util.Formats
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
@@ -104,8 +106,18 @@ fun EcranDevis(
     val totaux = Calculs.totaux(lignes, courant.remiseGlobalePct)
     val client = clients.firstOrNull { it.id == courant.clientId }
 
-    fun maj(nouveau: Devis) {
-        portee.launch(Dispatchers.IO) { dao.enregistrerDevis(nouveau) }
+    val franchise = !reglages.assujetti
+    // Les champs écrivent à chaque frappe : les écritures sont sérialisées et
+    // partent de l'état en base (pas d'un instantané périmé), puis les totaux
+    // sont recalculés (acompte, remise).
+    val verrou = remember { Mutex() }
+    fun maj(transformation: (Devis) -> Devis) {
+        portee.launch(Dispatchers.IO) {
+            verrou.withLock {
+                val actuel = dao.devis(devisId) ?: return@withLock
+                OperationsDevis.enregistrer(transformation(actuel), dao.lignesListe(devisId), dao, franchise)
+            }
+        }
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -138,19 +150,19 @@ fun EcranDevis(
                 ChampTexte(
                     "Objet du devis",
                     courant.objet,
-                    onValeur = { maj(courant.copy(objet = it)) },
+                    onValeur = { objet -> maj { it.copy(objet = objet) } },
                 )
                 ChampTexte(
                     "Adresse du chantier (si différente)",
                     courant.adresseChantier.orEmpty(),
-                    onValeur = { maj(courant.copy(adresseChantier = it.ifBlank { null })) },
+                    onValeur = { adresse -> maj { it.copy(adresseChantier = adresse.ifBlank { null }) } },
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Column(Modifier.weight(1f)) {
                         ChampTexte(
                             "Validité (jours)",
                             courant.validiteJours.toString(),
-                            onValeur = { maj(courant.copy(validiteJours = it.toIntOrNull() ?: 0)) },
+                            onValeur = { jours -> maj { it.copy(validiteJours = jours.toIntOrNull() ?: 0) } },
                             clavier = KeyboardType.Number,
                         )
                     }
@@ -158,7 +170,7 @@ fun EcranDevis(
                         ChampTexte(
                             "Acompte (%)",
                             Formats.nombre(courant.acomptePct),
-                            onValeur = { maj(courant.copy(acomptePct = Formats.montant(it) ?: 0.0)) },
+                            onValeur = { pct -> maj { it.copy(acomptePct = Formats.montant(pct) ?: 0.0) } },
                             clavier = KeyboardType.Decimal,
                         )
                     }
@@ -166,7 +178,7 @@ fun EcranDevis(
                         ChampTexte(
                             "Remise (%)",
                             Formats.nombre(courant.remiseGlobalePct),
-                            onValeur = { maj(courant.copy(remiseGlobalePct = Formats.montant(it) ?: 0.0)) },
+                            onValeur = { pct -> maj { it.copy(remiseGlobalePct = Formats.montant(pct) ?: 0.0) } },
                             clavier = KeyboardType.Decimal,
                         )
                     }
@@ -174,7 +186,7 @@ fun EcranDevis(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(
                         checked = courant.signeChezClient,
-                        onCheckedChange = { maj(courant.copy(signeChezClient = it)) },
+                        onCheckedChange = { coche -> maj { it.copy(signeChezClient = coche) } },
                         modifier = Modifier.size(48.dp),
                     )
                     Text("Signé chez le client (rétractation 14 jours)", style = MaterialTheme.typography.bodyMedium)
@@ -182,7 +194,7 @@ fun EcranDevis(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(
                         checked = courant.mentionTauxReduit,
-                        onCheckedChange = { maj(courant.copy(mentionTauxReduit = it)) },
+                        onCheckedChange = { coche -> maj { it.copy(mentionTauxReduit = coche) } },
                         modifier = Modifier.size(48.dp),
                     )
                     Text("Travaux à TVA réduite (mention à signer)", style = MaterialTheme.typography.bodyMedium)
@@ -326,7 +338,9 @@ fun EcranDevis(
                 texte = if (verrouille) "Voir le devis et l'envoyer" else "Enregistrer et prévisualiser",
                 onClick = {
                     portee.launch(Dispatchers.IO) {
-                        OperationsDevis.enregistrer(courant, lignes, dao)
+                        verrou.withLock {
+                            OperationsDevis.enregistrer(dao.devis(devisId) ?: courant, dao.lignesListe(devisId), dao, franchise)
+                        }
                         withContext(Dispatchers.Main) { onDetail() }
                     }
                 },
@@ -338,14 +352,14 @@ fun EcranDevis(
         DialogueChoixClient(
             clients = clients,
             onChoisir = { c ->
-                maj(
-                    courant.copy(
+                maj {
+                    it.copy(
                         clientId = c.id,
                         clientNom = c.nom,
                         clientAdresse = c.adresse,
                         clientSiren = c.siren,
-                    ),
-                )
+                    )
+                }
                 choixClient = false
             },
             onFermer = { choixClient = false },
@@ -354,8 +368,9 @@ fun EcranDevis(
 
     if (nouvelleLigne || ligneEnEdition != null) {
         DialogueLigne(
-            ligne = ligneEnEdition ?: Ligne(devisId = devisId, position = lignes.size),
+            ligne = ligneEnEdition ?: Ligne(devisId = devisId, position = lignes.size, tauxTva = if (franchise) 0.0 else 20.0),
             articles = articles,
+            franchiseTva = franchise,
             onEnregistrer = { l ->
                 portee.launch(Dispatchers.IO) {
                     val article = l.articleId?.let { id -> articles.firstOrNull { it.id == id } }
@@ -372,7 +387,7 @@ fun EcranDevis(
                     )
                     article?.let { dao.comptabiliserUsage(it.id) }
                     val apres = dao.lignesListe(devisId)
-                    OperationsDevis.enregistrer(dao.devis(devisId) ?: courant, apres, dao)
+                    OperationsDevis.enregistrer(dao.devis(devisId) ?: courant, apres, dao, franchise)
                 }
                 ligneEnEdition = null
                 nouvelleLigne = false
@@ -382,7 +397,7 @@ fun EcranDevis(
                     portee.launch(Dispatchers.IO) {
                         dao.supprimerLigne(l.id)
                         val apres = dao.lignesListe(devisId)
-                        OperationsDevis.enregistrer(dao.devis(devisId) ?: courant, apres, dao)
+                        OperationsDevis.enregistrer(dao.devis(devisId) ?: courant, apres, dao, franchise)
                     }
                     ligneEnEdition = null
                 }
@@ -428,6 +443,7 @@ fun DialogueLigne(
     onEnregistrer: (Ligne) -> Unit,
     onSupprimer: (() -> Unit)?,
     onFermer: () -> Unit,
+    franchiseTva: Boolean = false,
 ) {
     var designation by remember { mutableStateOf(ligne.designation) }
     var quantite by remember { mutableStateOf(Formats.nombre(ligne.quantite)) }
@@ -459,7 +475,11 @@ fun DialogueLigne(
                         ChampTexte("Prix unitaire HT", prix, onValeur = { prix = it }, clavier = KeyboardType.Decimal)
                     }
                     Column(Modifier.weight(1f)) {
-                        ChampTexte("TVA %", tva, onValeur = { tva = it }, clavier = KeyboardType.Decimal)
+                        if (franchiseTva) {
+                            Text("TVA : non applicable (franchise en base)", style = MaterialTheme.typography.bodyMedium, color = Couleurs.gris)
+                        } else {
+                            ChampTexte("TVA %", tva, onValeur = { tva = it }, clavier = KeyboardType.Decimal)
+                        }
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -488,7 +508,7 @@ fun DialogueLigne(
                                     designation = a.libelle
                                     unite = a.unite
                                     prix = Formats.nombre(a.prixHT)
-                                    tva = Formats.nombre(a.tauxTva)
+                                    tva = if (franchiseTva) "0" else Formats.nombre(a.tauxTva)
                                     choixArticle = false
                                 },
                                 modifier = Modifier.padding(vertical = 2.dp),
@@ -512,7 +532,7 @@ fun DialogueLigne(
                             quantite = Formats.montant(quantite) ?: 1.0,
                             unite = unite.ifBlank { "u" },
                             prixUnitaireHT = Formats.montant(prix) ?: 0.0,
-                            tauxTva = Formats.montant(tva) ?: 20.0,
+                            tauxTva = if (franchiseTva) 0.0 else Formats.montant(tva) ?: 20.0,
                             remisePct = Formats.montant(remise) ?: 0.0,
                             section = section.ifBlank { null },
                             articleId = articleId,

@@ -26,8 +26,13 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -121,6 +126,15 @@ fun CarteBloc(
     }
 }
 
+/**
+ * Champ de saisie dont la valeur vient souvent d'un stockage qui ne notifie pas
+ * Compose (SharedPreferences) ou qui répond en différé (Room). Le texte tapé
+ * vit donc ici : chaque frappe est transmise par [onValeur], et une valeur
+ * poussée de l'extérieur (fiche reprise de l'Annuaire, autre écran) n'est
+ * adoptée que si elle change pendant que le champ n'est pas en cours de saisie.
+ * Sans cela, un champ relié directement à une préférence revient en arrière à
+ * chaque lettre.
+ */
 @Composable
 fun ChampTexte(
     etiquette: String,
@@ -131,17 +145,28 @@ fun ChampTexte(
     lignes: Int = 1,
     aide: String? = null,
 ) {
+    var texte by remember { mutableStateOf(valeur) }
+    var dernierExterne by remember { mutableStateOf(valeur) }
+    var enSaisie by remember { mutableStateOf(false) }
+    if (valeur != dernierExterne) {
+        dernierExterne = valeur
+        if (!enSaisie) texte = valeur
+    }
     Column(modifier.fillMaxWidth()) {
         OutlinedTextField(
-            value = valeur,
-            onValueChange = onValeur,
+            value = texte,
+            onValueChange = {
+                texte = it
+                onValeur(it)
+            },
             label = { Text(etiquette, fontSize = 16.sp) },
             singleLine = lignes == 1,
             minLines = lignes,
             keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = clavier),
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = Tailles.boutonSecondaire),
+                .heightIn(min = Tailles.boutonSecondaire)
+                .onFocusChanged { enSaisie = it.isFocused },
             textStyle = MaterialTheme.typography.bodyLarge,
         )
         if (aide != null) {

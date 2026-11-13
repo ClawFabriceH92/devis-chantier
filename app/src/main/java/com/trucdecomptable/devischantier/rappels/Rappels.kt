@@ -249,14 +249,13 @@ class RappelsWorker(context: Context, parametres: WorkerParameters) :
         val heure = calendrier.get(Calendar.HOUR_OF_DAY)
         val jourSemaine = calendrier.get(Calendar.DAY_OF_WEEK)
 
-        if (!AnalyseRappels.dansPlageHoraire(
-                heure, reglages.heureDebut, reglages.heureFin,
-                reglages.dimancheAutorise, jourSemaine,
-            )
-        ) {
-            Diag.record("rappel", "hors plage horaire ($heure h), report")
-            return Result.retry()
-        }
+        // La plage horaire ne concerne que les notifications : passer un devis en
+        // « expiré » ou écrire la sauvegarde du jour n'a pas à attendre 8 h.
+        val heureAutorisee = AnalyseRappels.dansPlageHoraire(
+            heure, reglages.heureDebut, reglages.heureFin,
+            reglages.dimancheAutorise, jourSemaine,
+        )
+        if (!heureAutorisee) Diag.record("rappel", "hors plage horaire ($heure h) : pas de notification ce passage")
 
         val tous = dao.devisListe()
 
@@ -272,7 +271,7 @@ class RappelsWorker(context: Context, parametres: WorkerParameters) :
             )
         }
 
-        if (reglages.notificationsActives) {
+        if (reglages.notificationsActives && heureAutorisee) {
             val expirants = AnalyseRappels.devisExpirant(tous, maintenant, reglages.rappelJoursAvant)
             if (expirants.isNotEmpty()) {
                 val premier = expirants.first()
@@ -329,6 +328,13 @@ class RappelsWorker(context: Context, parametres: WorkerParameters) :
                     val uri = android.net.Uri.parse(dossier)
                     val resultat = Sauvegarde.exporterVersDossier(context, reglages, uri, motDePasse)
                     Diag.record("sauvegarde/auto", resultat.message)
+                    if (!resultat.ok && reglages.notificationsActives && heureAutorisee) {
+                        Notifications.afficher(
+                            context, 1004, Notifications.CANAL_RAPPELS,
+                            "Sauvegarde automatique impossible",
+                            resultat.message + " Vérifiez le dossier choisi dans les réglages.",
+                        )
+                    }
                 }.onFailure { Diag.record("sauvegarde/auto", it) }
             }
         }

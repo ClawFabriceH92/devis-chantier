@@ -41,6 +41,7 @@ import com.trucdecomptable.devischantier.data.Reglages
 import com.trucdecomptable.devischantier.data.Statut
 import com.trucdecomptable.devischantier.devis.OperationsDevis
 import com.trucdecomptable.devischantier.ui.BoutonGeant
+import com.trucdecomptable.devischantier.ui.DialogueConfirmation
 import com.trucdecomptable.devischantier.ui.DevisTheme
 import com.trucdecomptable.devischantier.ui.EcranAchats
 import com.trucdecomptable.devischantier.ui.EcranArticles
@@ -76,6 +77,7 @@ class MainActivity : ComponentActivity() {
     companion object {
         const val EXTRA_DEVIS_ID = "devis_id"
         const val EXTRA_RELANCER = "relancer"
+        const val EXTRA_TRAITEE = "intention_traitee"
     }
 
     private var intention by mutableStateOf<Intent?>(null)
@@ -115,9 +117,14 @@ private fun Application(reglages: Reglages, intention: Intent?) {
     val articles by dao.articles().collectAsStateWithLifecycle(initialValue = emptyList())
 
     // Raccourcis de l'écran d'accueil du téléphone (devischantier://dictee, //nouveau)
-    // et notification d'un rappel (EXTRA_DEVIS_ID).
+    // et notification d'un rappel (EXTRA_DEVIS_ID). Une rotation recrée
+    // l'activité avec la même intention : elle est marquée traitée sur l'objet
+    // lui-même, sinon le raccourci « nouveau devis » créerait un brouillon à
+    // chaque rotation. Une nouvelle notification arrive dans un nouvel objet.
     LaunchedEffect(intention) {
         val source = intention ?: return@LaunchedEffect
+        if (source.getBooleanExtra(MainActivity.EXTRA_TRAITEE, false)) return@LaunchedEffect
+        source.putExtra(MainActivity.EXTRA_TRAITEE, true)
         val devisId = source.getLongExtra(MainActivity.EXTRA_DEVIS_ID, 0L).takeIf { it > 0 }
         when {
             source.data?.host == "dictee" -> ecran = Ecran.Dictee(null)
@@ -154,6 +161,7 @@ private fun Application(reglages: Reglages, intention: Intent?) {
     }
 
     val etatMaj by UpdateManager.state.collectAsStateWithLifecycle()
+    var suppressionDemandee by remember { mutableStateOf<com.trucdecomptable.devischantier.data.Devis?>(null) }
 
     Scaffold(
         bottomBar = {
@@ -233,10 +241,7 @@ private fun Application(reglages: Reglages, intention: Intent?) {
                             "FACTURE" -> portee.launch(Dispatchers.IO) {
                                 OperationsDevis.marquerFacture(dao, devisCible)
                             }
-                            "SUPPRIMER" -> portee.launch(Dispatchers.IO) {
-                                dao.supprimerLignes(devisCible.id)
-                                dao.supprimerDevis(devisCible.id)
-                            }
+                            "SUPPRIMER" -> suppressionDemandee = devisCible
                         }
                     },
                 )
@@ -290,14 +295,37 @@ private fun Application(reglages: Reglages, intention: Intent?) {
         }
     }
 
+    suppressionDemandee?.let { cible ->
+        DialogueConfirmation(
+            titre = "Supprimer ce brouillon ?",
+            texte = "Le devis ${cible.numero} sera supprimé définitivement.",
+            libelleConfirmer = "Supprimer",
+            onConfirmer = {
+                portee.launch(Dispatchers.IO) {
+                    dao.supprimerLignes(cible.id)
+                    dao.supprimerDevis(cible.id)
+                }
+            },
+            onAnnuler = { suppressionDemandee = null },
+        )
+    }
+
     DialogueMiseAJour(
         etat = etatMaj,
         onTelecharger = { UpdateManager.download(contexte) },
-        onInstaller = { UpdateManager.install(contexte) },
+        onInstaller = {
+            if (UpdateManager.canInstall(contexte)) UpdateManager.install(contexte) else UpdateManager.openInstallSettings(contexte)
+        },
         onAutoriser = { UpdateManager.openInstallSettings(contexte) },
         onPlusTard = {
             val disponible = etatMaj as? UpdateManager.State.Available
-            if (disponible != null) UpdateManager.ignorerVersion(disponible.version) else UpdateManager.dismiss()
+            if (disponible != null) {
+                // « Plus tard » survit au redémarrage : la version est mémorisée.
+                reglages.versionIgnoree = disponible.version
+                UpdateManager.ignorerVersion(disponible.version)
+            } else {
+                UpdateManager.dismiss()
+            }
         },
     )
 }

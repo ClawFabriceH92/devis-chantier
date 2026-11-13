@@ -71,6 +71,9 @@ object UpdateManager {
      */
     fun demarrer(context: Context) {
         val application = context.applicationContext
+        versionIgnoree = runCatching {
+            com.trucdecomptable.devischantier.data.Reglages(application).versionIgnoree
+        }.getOrDefault("")
         scope.launch {
             while (true) {
                 runCatching { check(application, versionIgnoree, manual = false) }
@@ -218,6 +221,11 @@ object UpdateManager {
                 }
             }
             if (target.length() == 0L) error("Téléchargement vide")
+            val annonce = runCatching { http.newCall(Request.Builder().url(url).head().build()).execute().use { it.header("Content-Length")?.toLongOrNull() } }.getOrNull()
+            if (annonce != null && annonce > 0 && annonce != target.length()) {
+                target.delete()
+                error("téléchargement incomplet (${target.length()} / $annonce octets)")
+            }
             // A file that does not start with "PK" is a web page, not an APK.
             val entete = ByteArray(2)
             target.inputStream().use { it.read(entete) }

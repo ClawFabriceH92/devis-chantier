@@ -83,6 +83,22 @@ interface Dao {
     @Query("SELECT numero FROM devis WHERE numero LIKE :prefixe || '%'")
     suspend fun numeros(prefixe: String): List<String>
 
+    @Query("SELECT indice FROM devis WHERE numero = :numero")
+    suspend fun indices(numero: String): List<String>
+
+    /**
+     * Numérotation et insertion dans la même transaction : deux créations
+     * simultanées (double appui, raccourci relancé) ne peuvent plus recevoir le
+     * même numéro.
+     */
+    @Transaction
+    suspend fun creerDevisNumerote(devis: Devis, prefixe: String, annee: Int): Long {
+        val numero = com.trucdecomptable.devischantier.devis.Calculs.numeroSuivant(
+            prefixe, annee, numeros("${prefixe.trim().ifBlank { "D" }}-$annee-"),
+        )
+        return enregistrerDevis(devis.copy(numero = numero))
+    }
+
     // ---- lignes ----
     @Query("SELECT * FROM ligne WHERE devisId = :devisId ORDER BY position, id")
     fun lignes(devisId: Long): Flow<List<Ligne>>

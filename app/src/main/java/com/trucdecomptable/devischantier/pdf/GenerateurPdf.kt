@@ -33,6 +33,9 @@ object GenerateurPdf {
     private const val LARGEUR = 595
     private const val HAUTEUR = 842
     private const val MARGE = 36f
+    /** Réserve en bas de page pour le pied de page. */
+    private const val BAS = 40f
+    private const val HAUTEUR_SIGNATURE = 130f
 
     private val dateFr = SimpleDateFormat("dd/MM/yyyy", Locale.FRANCE)
 
@@ -67,9 +70,14 @@ object GenerateurPdf {
         }
         y = tableauLignes(toile, lignes, devis, totaux, entreprise, y, avecMarge, nouvellePage)
 
+        // Chaque bloc annonce sa hauteur : s'il ne tient pas sur la page, il part
+        // entier sur la suivante. Les mentions obligatoires ne sont jamais
+        // tronquées, quel que soit le nombre de lignes du devis.
+        if (y + hauteurTotaux(totaux, devis) > HAUTEUR - BAS) y = nouvellePage()
         y = blocTotaux(toile, totaux, devis, entreprise, y)
-        y = blocMentions(toile, devis, entreprise, y)
+        y = blocMentions({ toile }, devis, y, nouvellePage)
         if (signature != null || devis.signeChezClient || devis.statut != "BROUILLON") {
+            if (y + HAUTEUR_SIGNATURE > HAUTEUR - BAS) y = nouvellePage()
             blocSignature(toile, devis, entreprise, signature, y)
         }
         piedDePage(toile, devis, numeroPage, entreprise)
@@ -151,7 +159,7 @@ object GenerateurPdf {
         val adresse = devis.adresseChantier ?: client?.adresse
         var ligneY = y + 26f
         if (!adresse.isNullOrBlank()) {
-            for (morceau in decouper(adresse, 42f, normal, 200f)) {
+            for (morceau in decouper(adresse, 9.5f, normal, 200f)) {
                 canvas.drawText(morceau, MARGE, ligneY, normal); ligneY += 12f
             }
         }
@@ -207,7 +215,10 @@ object GenerateurPdf {
             val section = ligne.section?.takeIf { it.isNotBlank() }
             if (section != null && section != sectionCourante) {
                 sectionCourante = section
-                if (y > HAUTEUR - 140f) y = nouvellePage()
+                if (y > HAUTEUR - 140f) {
+                    y = nouvellePage()
+                    bandeau()
+                }
                 canvas.drawRect(MARGE, y, LARGEUR - MARGE, y + 14f, Paint().apply { color = Color.rgb(228, 118, 27) })
                 canvas.drawText(
                     section.uppercase(Locale.FRANCE),
@@ -261,8 +272,8 @@ object GenerateurPdf {
             isFakeBoldText = true
         }
         val x = LARGEUR - MARGE - 4f
-        if (totaux.tvaParTaux.isNotEmpty() && devis.totalTVA > 0) {
-            totaux.tvaParTaux.forEach { (taux, montant) ->
+        if (totaux.totalTVA > 0) {
+            totaux.tvaParTaux.filter { it.value > 0 }.forEach { (taux, montant) ->
                 canvas.drawText("TVA ${Formats.nombre(taux)} % : ${Formats.euros(montant)}", x, y, normal)
                 y += 14f
             }
@@ -272,7 +283,7 @@ object GenerateurPdf {
             y += 14f
         }
         canvas.drawText("Total HT : ${Formats.euros(totaux.totalHT)}", x, y, normal); y += 14f
-        if (devis.totalTVA > 0) {
+        if (totaux.totalTVA > 0) {
             canvas.drawText("Total TVA : ${Formats.euros(totaux.totalTVA)}", x, y, normal); y += 14f
         }
         canvas.drawText("Total TTC : ${Formats.euros(totaux.totalTTC)}", x, y + 4f, gras); y += 20f
@@ -287,15 +298,26 @@ object GenerateurPdf {
         return y + 10f
     }
 
-    private fun blocMentions(canvas: Canvas, devis: Devis, entreprise: Entreprise, depart: Float): Float {
+    fun hauteurTotaux(totaux: Totaux, devis: Devis): Float {
+        var h = 0f
+        if (totaux.totalTVA > 0) h += 14f * totaux.tvaParTaux.count { it.value > 0 } + 14f
+        if (devis.remiseGlobalePct > 0) h += 14f
+        h += 14f + 20f
+        if (devis.acomptePct > 0) h += 14f
+        return h + 10f
+    }
+
+    /** Les mentions, ligne à ligne, avec saut de page quand la place manque : rien n'est perdu. */
+    private fun blocMentions(toile: () -> Canvas, devis: Devis, depart: Float, nouvellePage: () -> Float): Float {
         var y = depart
         val petit = Paint().apply { textSize = 8.2f; isAntiAlias = true; color = Color.DKGRAY }
         val texte = devis.mentionsTexte.ifBlank { "—" }
         for (ligne in texte.split("\n")) {
             if (ligne.isBlank()) { y += 4f; continue }
             for (morceau in decouper(ligne, 8.2f, petit, LARGEUR - 2 * MARGE)) {
-                if (y > HAUTEUR - 60f) return y
-                canvas.drawText(morceau, MARGE, y, petit)
+                if (y + 10.5f > HAUTEUR - BAS) y = nouvellePage()
+                // la toile a pu changer de page : on dessine sur la toile courante
+                toile().drawText(morceau, MARGE, y, petit)
                 y += 10.5f
             }
         }

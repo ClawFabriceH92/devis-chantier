@@ -148,12 +148,14 @@ fun EcranAchats(
             achat = achat,
             onEnregistrer = { a ->
                 portee.launch(Dispatchers.IO) {
-                    val id = dao.enregistrerAchat(a)
+                    // @Upsert renvoie -1 pour une mise à jour : l'identifiant d'un
+                    // achat existant est le sien, pas la valeur renvoyée.
+                    val retour = dao.enregistrerAchat(a)
+                    val id = if (a.id != 0L) a.id else retour
                     if (a.id != 0L && a.prixHT != achat.prixHT) {
                         dao.enregistrerPrix(PrixAchat(achatId = id, prixHT = a.prixHT))
                     }
-                    val lie = a.id != 0L || id != 0L
-                    if (lie) lienPour = a.copy(id = id)
+                    if (id > 0L) lienPour = a.copy(id = id)
                 }
                 enEdition = null
             },

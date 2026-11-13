@@ -52,16 +52,40 @@ val keystoreFile: File? = run {
 android {
     namespace = "com.trucdecomptable.devischantier"
     compileSdk = 35
+    // Même version du NDK partout (CI, poste de dev) : llama.cpp est compilé
+    // dans l'APK pour la dictée assistée hors ligne (src/main/cpp).
+    ndkVersion = "27.0.12077973"
 
     defaultConfig {
         applicationId = "com.trucdecomptable.devischantier"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4
-        versionName = "1.0.3"
+        versionCode = 5
+        versionName = "1.1.0"
         resourceConfigurations += listOf("fr")
         // Les vérifications qui exigent un vrai Android (PDF, Keystore, Room).
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // Téléphones 64 bits uniquement : un modèle d'un gigaoctet n'a pas sa
+        // place en 32 bits. x86_64 sert à l'émulateur de la QA.
+        ndk {
+            abiFilters += listOf("arm64-v8a", "x86_64")
+        }
+        externalNativeBuild {
+            cmake {
+                // Toujours optimisé, même en debug : un moteur d'inférence en -O0
+                // est inutilisable. Un seul libc++ partagé entre les .so de ggml,
+                // llama et le pont JNI.
+                arguments += listOf("-DANDROID_STL=c++_shared", "-DCMAKE_BUILD_TYPE=Release")
+            }
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
     }
 
     signingConfigs {
@@ -99,6 +123,10 @@ android {
 
     packaging {
         resources.excludes += setOf("/META-INF/{AL2.0,LGPL2.1}")
+        // ggml choisit au démarrage la variante CPU (dotprod, i8mm, SVE…) en
+        // parcourant le dossier des bibliothèques natives : elles doivent donc
+        // être extraites de l'APK à l'installation.
+        jniLibs.useLegacyPackaging = true
     }
 
     // android.util.Log lève « not mocked » en test JVM : les valeurs par défaut

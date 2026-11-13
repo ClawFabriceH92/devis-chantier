@@ -88,7 +88,7 @@ object Mentions {
     /** Mention de taux réduit (10 % ou 5,5 %) : elle remplace le Cerfa depuis 2025. */
     fun mentionTauxReduit(ctx: ContexteMentions): String? {
         if (!ctx.mentionTauxReduit) return null
-        val taux = ctx.tauxReduit.toInt()
+        val taux = com.trucdecomptable.devischantier.util.Formats.nombre(ctx.tauxReduit)
         return "TVA à $taux % appliquée aux travaux d'amélioration, de transformation, " +
             "d'aménagement et d'entretien d'un local d'habitation achevé depuis plus de deux ans. " +
             "Le client atteste que les conditions de ce taux sont remplies ; " +

@@ -39,6 +39,13 @@ object ClaudeClient {
      */
     const val MODELE_DEFAUT = "claude-opus-5-5"
 
+    /**
+     * Repli pour un service « compatible OpenAI » dont la liste des modèles est
+     * inaccessible : un nom répandu chez les fournisseurs européens (Mistral),
+     * jamais un identifiant Claude qui y produirait une erreur 404.
+     */
+    const val MODELE_DEFAUT_OPENAI = "mistral-small-latest"
+
     /** Niveaux proposés à l'artisan, du plus fin au plus économique. */
     object Niveau {
         const val QUALITE = "QUALITE"
@@ -105,18 +112,35 @@ object ClaudeClient {
     // ---------------------------------------------------------------- modèles
 
     /** Les noms et prix changent souvent : la liste vient du fournisseur (V-36). */
-    suspend fun listerModeles(cle: String, baseUrl: String = BASE): Result<List<String>> =
+    suspend fun listerModeles(
+        cle: String,
+        baseUrl: String = BASE,
+        compatibleOpenAi: Boolean = false,
+    ): Result<List<String>> =
         withContext(Dispatchers.IO) {
             runCatching {
                 val reponse = requete(
-                    url = "${baseUrl.trimEnd('/')}/v1/models",
+                    url = urlModeles(baseUrl, compatibleOpenAi),
                     corps = null,
-                    entetes = mapOf("x-api-key" to cle, "anthropic-version" to VERSION_API),
+                    entetes = if (compatibleOpenAi) {
+                        mapOf("Authorization" to "Bearer $cle")
+                    } else {
+                        mapOf("x-api-key" to cle, "anthropic-version" to VERSION_API)
+                    },
                 )
                 if (!reponse.ok) error(reponse.erreur ?: "HTTP ${reponse.code}")
                 parseModeles(reponse.texte)
             }.onFailure { Diag.record("claude/modeles", it) }
         }
+
+    /**
+     * Anthropic expose /v1/models à la racine ; un service compatible OpenAI est
+     * saisi avec son préfixe (« https://api.mistral.ai/v1 ») et expose /models.
+     */
+    fun urlModeles(baseUrl: String, compatibleOpenAi: Boolean): String {
+        val base = baseUrl.trimEnd('/')
+        return if (compatibleOpenAi) "$base/models" else "$base/v1/models"
+    }
 
     fun parseModeles(corps: String): List<String> {
         val racine = runCatching { JSONObject(corps) }.getOrNull() ?: return emptyList()
@@ -130,8 +154,10 @@ object ClaudeClient {
         return liste
     }
 
-    suspend fun testerCle(cle: String, baseUrl: String = BASE): Result<String> =
-        listerModeles(cle, baseUrl).map { if (it.isEmpty()) MODELE_DEFAUT else it.first() }
+    suspend fun testerCle(cle: String, baseUrl: String = BASE, compatibleOpenAi: Boolean = false): Result<String> =
+        listerModeles(cle, baseUrl, compatibleOpenAi).map {
+            if (it.isEmpty()) (if (compatibleOpenAi) MODELE_DEFAUT_OPENAI else MODELE_DEFAUT) else it.first()
+        }
 
     // ------------------------------------------------------------- extraction
 
@@ -150,7 +176,12 @@ object ClaudeClient {
             // l'artisan ne peut pas interpréter : on demande la liste au
             // fournisseur quand aucun modèle n'est enregistré.
             val modeleEffectif = modele.ifBlank {
-                if (compatibleOpenAi) MODELE_DEFAUT else resoudreModele(cle, baseUrl, niveau)
+                if (compatibleOpenAi) {
+                    listerModeles(cle, baseUrl, compatibleOpenAi = true).getOrNull()?.firstOrNull()
+                        ?: MODELE_DEFAUT_OPENAI
+                } else {
+                    resoudreModele(cle, baseUrl, niveau)
+                }
             }
             val reponse = if (compatibleOpenAi) {
                 requeteCompatibleOpenAi(baseUrl, cle, modeleEffectif, texte, catalogue)
@@ -255,7 +286,7 @@ object ClaudeClient {
         return message.optString("content").takeIf { it.isNotBlank() }
     }
 
-    fun parseLignes(brut: String): List<PropositionLigne> {
+    fun parseLignes(brut: String, source: String = "IA"): List<PropositionLigne> {
         val nettoye = nettoyerBalises(brut)
         val tableau = runCatching { JSONArray(nettoye) }.getOrElse {
             val objet = runCatching { JSONObject(nettoye) }.getOrNull() ?: return emptyList()
@@ -283,7 +314,7 @@ object ClaudeClient {
                     ),
                     articleId = articleId,
                     confiance = confiance,
-                    source = "IA",
+                    source = source,
                 ),
             )
         }
@@ -339,7 +370,7 @@ object ClaudeClient {
         catalogue: String,
     ): Resultat {
         val corps = JSONObject()
-            .put("model", modele.ifBlank { "mistral-small-latest" })
+            .put("model", modele.ifBlank { MODELE_DEFAUT_OPENAI })
             .put("temperature", 0)
             .put("max_tokens", 1500)
             .put(

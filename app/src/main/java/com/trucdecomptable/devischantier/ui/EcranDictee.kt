@@ -39,6 +39,7 @@ import com.trucdecomptable.devischantier.data.Ligne
 import com.trucdecomptable.devischantier.data.Reglages
 import com.trucdecomptable.devischantier.devis.Calculs
 import com.trucdecomptable.devischantier.devis.OperationsDevis
+import com.trucdecomptable.devischantier.ia.ModeleLocal
 import com.trucdecomptable.devischantier.util.Diag
 import com.trucdecomptable.devischantier.util.Formats
 import com.trucdecomptable.devischantier.voice.Commande
@@ -119,7 +120,7 @@ fun EcranDictee(
                                     portee.launch(Dispatchers.IO) {
                                         analyse = true
                                         val articles = dao.articlesListe()
-                                        val resultat = MoteurDictee.traiter(it, articles, reglages)
+                                        val resultat = MoteurDictee.traiter(it, articles, reglages, contexte)
                                         withContext(Dispatchers.Main) {
                                             analyse = false
                                             propositions = resultat.propositions
@@ -146,7 +147,14 @@ fun EcranDictee(
                 )
                 if (analyse) {
                     Spacer(Modifier.height(8.dp))
-                    Text("Analyse en cours…", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        if (reglages.iaFournisseur == MoteurDictee.Fournisseur.LOCAL && ModeleLocal.pret(contexte)) {
+                            "Analyse en cours sur le téléphone (quelques secondes, plus au premier usage)…"
+                        } else {
+                            "Analyse en cours…"
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
                 }
                 if (message.isNotBlank()) {
                     Spacer(Modifier.height(8.dp))
@@ -242,6 +250,7 @@ fun EcranDictee(
                                         ),
                                         apres,
                                         dao,
+                                        franchiseTva = !reglages.assujetti,
                                     )
                                 }
                                 withContext(Dispatchers.Main) { onTermine(id) }
@@ -254,11 +263,11 @@ fun EcranDictee(
 
             if (mode.isNotBlank()) {
                 Text(
-                    "Mode : $mode · " + if (reglages.iaCle.isNullOrBlank()) {
-                        "gratuit (aucune clé API)"
-                    } else {
-                        "clé API renseignée, ${reglages.iaDictees} dictée(s) assistée(s)"
-                    },
+                    "Mode : $mode · " + when (reglages.iaFournisseur) {
+                        MoteurDictee.Fournisseur.LOCAL ->
+                            if (ModeleLocal.pret(contexte)) "modèle embarqué, hors ligne" else "modèle embarqué non installé (réglages)"
+                        else -> if (reglages.iaCle.isNullOrBlank()) "aucune clé API" else "clé API renseignée"
+                    } + " · ${reglages.iaDictees} dictée(s) assistée(s)",
                     style = MaterialTheme.typography.bodyMedium,
                     color = Couleurs.gris,
                 )

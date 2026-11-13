@@ -193,6 +193,14 @@ fun EcranOnboarding(
                         style = MaterialTheme.typography.bodyMedium,
                         color = Couleurs.gris,
                     )
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        "Dictée vocale : elle fonctionne tout de suite par règles. Pour une compréhension " +
+                            "plus fine, hors ligne et gratuite, un modèle de langage (1 Go) se télécharge " +
+                            "dans les réglages, rubrique « Intelligence artificielle », de préférence en Wi-Fi.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Couleurs.gris,
+                    )
                 }
             }
             Spacer(Modifier.height(20.dp))

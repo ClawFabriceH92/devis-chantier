@@ -72,9 +72,12 @@ object Sauvegarde {
         val contenu = chiffrer(archive, motDePasse)
         val nom = nomFichier()
         val resolver = context.contentResolver
+        // Le sélecteur de dossier rend une URI d'arborescence (« tree ») :
+        // createDocument attend l'URI du document racine de cette arborescence.
+        val racine = uriDocumentRacine(uriDossier)
         val document = DocumentsContract.createDocument(
             resolver,
-            uriDossier,
+            racine,
             "application/octet-stream",
             nom,
         ) ?: error("Impossible de créer le fichier dans le dossier choisi.")
@@ -88,21 +91,44 @@ object Sauvegarde {
         Resultat(false, "Sauvegarde automatique impossible : ${it.message}")
     }
 
-    /** Restaure une archive : la base est remplacée, l'application doit être relancée. */
+    /** « content://…/tree/X » -> « content://…/tree/X/document/X » ; une URI de document est rendue telle quelle. */
+    fun uriDocumentRacine(uri: Uri): Uri =
+        if (DocumentsContract.isTreeUri(uri) && !uri.pathSegments.contains("document")) {
+            DocumentsContract.buildDocumentUriUsingTree(uri, DocumentsContract.getTreeDocumentId(uri))
+        } else {
+            uri
+        }
+
+    /**
+     * Restaure une archive : la base est vérifiée (en-tête SQLite, version de
+     * schéma connue) puis remplacée d'un seul mouvement (fichier temporaire puis
+     * renommage), et les réglages sont réappliqués. L'application doit être
+     * relancée : les écrans tiennent encore l'ancienne base.
+     */
     fun restaurer(context: Context, octets: ByteArray, motDePasse: String): Resultat = runCatching {
         val archive = dechiffrer(octets, motDePasse) ?: error("Phrase secrète incorrecte ou fichier abîmé.")
         val entrees = lireArchive(archive)
         val base = entrees["devis-chantier.db"] ?: error("Archive sans base de données.")
+        verifierBase(base)
         BaseLocale.fermer()
         val cible = context.getDatabasePath(BaseLocale.NOM_FICHIER)
         cible.parentFile?.mkdirs()
-        cible.writeBytes(base)
+        val temporaire = File(cible.path + ".restauration")
+        temporaire.writeBytes(base)
         // Un ancien journal WAL rejouerait l'état précédent : on l'efface.
         listOf("-wal", "-shm").forEach { suffixe ->
             File(cible.path + suffixe).takeIf { it.exists() }?.delete()
         }
+        if (!temporaire.renameTo(cible)) {
+            cible.delete()
+            if (!temporaire.renameTo(cible)) error("Impossible de remplacer la base.")
+        }
+        entrees["reglages.json"]?.let { octetsReglages ->
+            runCatching { Reglages(context).importer(reglagesDepuisJson(String(octetsReglages, Charsets.UTF_8))) }
+                .onFailure { Diag.record("sauvegarde/reglages", it) }
+        }
         Diag.record("sauvegarde", "base restaurée (${base.size / 1024} Ko)")
-        Resultat(true, "Sauvegarde restaurée. Fermez puis relancez l'application.")
+        Resultat(true, "Sauvegarde restaurée. L'application va redémarrer.")
     }.getOrElse {
         Diag.record("sauvegarde/restauration", it)
         Resultat(false, "Restauration impossible : ${it.message}")
@@ -126,7 +152,8 @@ object Sauvegarde {
             .put("application", "Devis Chantier")
             .put("date", SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.FRANCE).format(Date()))
             .put("entreprise", reglages.entrepriseNom)
-            .put("version_format", 1)
+            .put("version_format", 2)
+            .put("version_schema", VERSION_SCHEMA)
             .toString()
 
         val sortie = ByteArrayOutputStream()
@@ -137,8 +164,78 @@ object Sauvegarde {
             zip.putNextEntry(ZipEntry("informations.json"))
             zip.write(informations.toByteArray(Charsets.UTF_8))
             zip.closeEntry()
+            // Identité, assurance, médiateur, modèles d'emails : sans eux, un
+            // nouveau téléphone ne peut plus émettre un devis conforme.
+            zip.putNextEntry(ZipEntry("reglages.json"))
+            zip.write(reglagesEnJson(reglages.exporter()).toByteArray(Charsets.UTF_8))
+            zip.closeEntry()
         }
         return sortie.toByteArray()
+    }
+
+    /** Version du schéma Room que cette application sait ouvrir. */
+    const val VERSION_SCHEMA = 1
+
+    /**
+     * JSON typé : SharedPreferences distingue Int, Long et Float, ce que JSON ne
+     * fait pas (un getLong sur une valeur Int plante). Chaque entrée porte donc
+     * son type : {"cle": {"type": "long", "valeur": 123}}.
+     */
+    fun reglagesEnJson(valeurs: Map<String, Any?>): String {
+        val objet = JSONObject()
+        for ((cle, valeur) in valeurs) {
+            val type = when (valeur) {
+                null -> "null"
+                is Boolean -> "boolean"
+                is Int -> "int"
+                is Long -> "long"
+                is Float, is Double -> "float"
+                else -> "string"
+            }
+            val v: Any = when (valeur) {
+                null -> JSONObject.NULL
+                is Float -> valeur.toDouble()
+                is Boolean, is Int, is Long, is Double -> valeur
+                else -> valeur.toString()
+            }
+            objet.put(cle, JSONObject().put("type", type).put("valeur", v))
+        }
+        return objet.toString()
+    }
+
+    fun reglagesDepuisJson(texte: String): Map<String, Any?> {
+        val objet = JSONObject(texte)
+        val resultat = mutableMapOf<String, Any?>()
+        for (cle in objet.keys()) {
+            val entree = objet.optJSONObject(cle) ?: continue
+            resultat[cle] = when (entree.optString("type")) {
+                "null" -> null
+                "boolean" -> entree.optBoolean("valeur")
+                "int" -> entree.optInt("valeur")
+                "long" -> entree.optLong("valeur")
+                "float" -> entree.optDouble("valeur").toFloat()
+                else -> entree.optString("valeur")
+            }
+        }
+        return resultat
+    }
+
+    /**
+     * Refuse ce qui n'est pas une base SQLite ou qui vient d'une version plus
+     * récente de l'application : Room exigerait alors une migration inconnue et
+     * l'application ne s'ouvrirait plus.
+     */
+    fun verifierBase(octets: ByteArray) {
+        val entete = "SQLite format 3\u0000".toByteArray(Charsets.US_ASCII)
+        if (octets.size < 100 || !octets.copyOfRange(0, entete.size).contentEquals(entete)) {
+            error("Le fichier de l'archive n'est pas une base de données.")
+        }
+        // Octets 60..63 de l'en-tête : « user version » (gros-boutiste), posée par Room.
+        val version = ((octets[60].toInt() and 0xFF) shl 24) or ((octets[61].toInt() and 0xFF) shl 16) or
+            ((octets[62].toInt() and 0xFF) shl 8) or (octets[63].toInt() and 0xFF)
+        if (version > VERSION_SCHEMA) {
+            error("Cette sauvegarde vient d'une version plus récente de l'application (schéma $version) : mettez d'abord l'application à jour.")
+        }
     }
 
     private fun lireArchive(octets: ByteArray): Map<String, ByteArray> {

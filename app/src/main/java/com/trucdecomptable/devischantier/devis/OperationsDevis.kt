@@ -31,16 +31,18 @@ object OperationsDevis {
         val message: String = "",
     )
 
+    private fun annee(): Int = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
+
     suspend fun numeroSuivant(dao: Dao, reglages: Reglages): String {
-        val annee = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
-        return Calculs.numeroSuivant(reglages.prefixeNumero, annee, dao.numeros("${reglages.prefixeNumero}-$annee-"))
+        val prefixe = reglages.prefixeNumero.trim().ifBlank { "D" }
+        return Calculs.numeroSuivant(prefixe, annee(), dao.numeros("$prefixe-${annee()}-"))
     }
 
-    /** Nouveau brouillon prêt à saisir. */
+    /** Nouveau brouillon prêt à saisir ; le numéro est attribué dans la transaction d'insertion. */
     suspend fun nouveau(dao: Dao, reglages: Reglages, clientId: Long? = null): Long {
         val client = clientId?.let { dao.client(it) }
         val devis = Devis(
-            numero = numeroSuivant(dao, reglages),
+            numero = "",
             clientId = client?.id,
             clientNom = client?.nom.orEmpty(),
             clientAdresse = client?.adresse,
@@ -49,12 +51,25 @@ object OperationsDevis {
             validiteJours = reglages.validiteJours,
             acomptePct = reglages.acomptePct,
         )
-        return dao.enregistrerDevis(devis)
+        return dao.creerDevisNumerote(devis, reglages.prefixeNumero, annee())
     }
 
-    /** Totaux recalculés et enregistrés : le devis reste la référence. */
-    suspend fun enregistrer(devis: Devis, lignes: List<Ligne>, dao: Dao): Devis {
-        val totaux = Calculs.totaux(lignes, devis.remiseGlobalePct)
+    /**
+     * Totaux recalculés et enregistrés : le devis reste la référence. En
+     * franchise en base de TVA ([franchiseTva]), aucune ligne ne peut porter de
+     * TVA : celles qui en ont (article de catalogue à 10 ou 20 %) sont ramenées
+     * à 0 avant le calcul, sinon le PDF facturerait une TVA qu'il déclare « non
+     * applicable ».
+     */
+    suspend fun enregistrer(devis: Devis, lignes: List<Ligne>, dao: Dao, franchiseTva: Boolean = false): Devis {
+        val lignesEffectives = if (franchiseTva) {
+            lignes.map { l ->
+                if (l.tauxTva != 0.0) l.copy(tauxTva = 0.0).also { dao.enregistrerLigne(it) } else l
+            }
+        } else {
+            lignes
+        }
+        val totaux = Calculs.totaux(lignesEffectives, devis.remiseGlobalePct)
         val maj = devis.copy(
             totalHT = totaux.totalHT,
             totalTVA = totaux.totalTVA,
@@ -113,12 +128,17 @@ object OperationsDevis {
         avecMarge: Boolean = false,
         signature: Bitmap? = null,
     ): Preparation {
-        val manquantes = controler(devis, client, lignes, reglages)
+        // Un devis déjà envoyé garde les mentions figées à l'envoi (F-15) : changer
+        // d'assureur ensuite ne doit pas produire un document différent de celui
+        // que le client a reçu. Le contrôle des mentions ne porte que sur les brouillons.
+        val fige = Statut.verrouille(devis.statut) && devis.mentionsTexte.isNotBlank()
+        val manquantes = if (fige) emptyList() else controler(devis, client, lignes, reglages)
         if (manquantes.isNotEmpty()) {
             return Preparation(ok = false, manquantes = manquantes, message = "Mentions obligatoires incomplètes")
         }
         val ctx = contexte(devis, client, reglages, lignes.size)
-        val mentions = Mentions.texteComplet(ctx)
+        val mentions = if (fige) devis.mentionsTexte else Mentions.texteComplet(ctx)
+        val signatureEffective = signature ?: GenerateurPdf.chargerBitmap(devis.signatureChemin)
         val entreprise = GenerateurPdf.Entreprise(
             nom = reglages.entrepriseNom,
             adresse = reglages.adresseEntreprise,
@@ -134,7 +154,7 @@ object OperationsDevis {
             lignes = lignes,
             entreprise = entreprise,
             logo = GenerateurPdf.chargerBitmap(reglages.logoChemin),
-            signature = signature,
+            signature = signatureEffective,
             avecMarge = avecMarge,
         )
         val donnees = File(pdf.parentFile, "devis-${devis.numero}-${devis.indice}.json")
@@ -146,17 +166,30 @@ object OperationsDevis {
         return Preparation(true, pdf, donnees, message = "Document prêt")
     }
 
-    /** Envoi au client : le devis est verrouillé et les mentions sont figées (F-15). */
+    /**
+     * Envoi au client : le brouillon est verrouillé et les mentions figées (F-15).
+     * Un devis déjà accepté, transmis ou facturé qui est renvoyé garde son
+     * statut : seul le journal en garde trace.
+     */
     suspend fun marquerEnvoye(dao: Dao, devis: Devis, client: Client?, lignes: List<Ligne>, reglages: Reglages): Devis {
-        val ctx = contexte(devis, client, reglages, lignes.size)
-        val maj = devis.copy(
-            statut = Statut.ENVOYE,
-            dateEnvoi = System.currentTimeMillis(),
-            mentionsTexte = Mentions.texteComplet(ctx),
-        )
-        dao.enregistrerDevis(maj)
+        val avance = devis.statut in setOf(Statut.ACCEPTE, Statut.TRANSMIS, Statut.FACTURE)
+        val maj = if (avance) {
+            devis
+        } else {
+            val ctx = contexte(devis, client, reglages, lignes.size)
+            devis.copy(
+                statut = Statut.ENVOYE,
+                dateEnvoi = devis.dateEnvoi?.takeIf { devis.statut == Statut.ENVOYE } ?: System.currentTimeMillis(),
+                mentionsTexte = devis.mentionsTexte.ifBlank { Mentions.texteComplet(ctx) },
+            )
+        }
+        if (!avance) dao.enregistrerDevis(maj)
         dao.ajouterEvenement(
-            Evenement(devisId = devis.id, type = "ENVOI_CLIENT", detail = "indice ${devis.indice}"),
+            Evenement(
+                devisId = devis.id,
+                type = "ENVOI_CLIENT",
+                detail = "indice ${devis.indice}" + if (devis.statut != Statut.BROUILLON) " (renvoi)" else "",
+            ),
         )
         Diag.record("devis", "${devis.numero} envoyé au client")
         return maj
@@ -173,9 +206,10 @@ object OperationsDevis {
         return maj
     }
 
+    /** Transmission au comptable : un devis facturé reste facturé, la date et le journal sont posés. */
     suspend fun marquerTransmis(dao: Dao, devis: Devis, destinataires: String): Devis {
         val maj = devis.copy(
-            statut = Statut.TRANSMIS,
+            statut = if (devis.statut == Statut.FACTURE) Statut.FACTURE else Statut.TRANSMIS,
             dateTransmission = System.currentTimeMillis(),
             transmisComptable = true,
         )
@@ -224,13 +258,18 @@ object OperationsDevis {
         return nouvelId
     }
 
-    /** Nouvelle version B, C… d'un devis envoyé, pour garder la trace (F-15). */
+    /**
+     * Nouvelle version B, C… d'un devis envoyé, pour garder la trace (F-15).
+     * L'indice suit le plus grand déjà attribué à ce numéro, pas celui de la
+     * version d'origine : créer une version depuis A quand B existe donne C.
+     */
     suspend fun nouvelleVersion(dao: Dao, devisId: Long): Long? {
         val devis = dao.devis(devisId) ?: return null
         val lignes = dao.lignesListe(devisId)
+        val dernierIndice = dao.indices(devis.numero).maxWithOrNull(compareBy({ it.length }, { it })) ?: devis.indice
         val copie = devis.copy(
             id = 0,
-            indice = Calculs.indiceSuivant(devis.indice),
+            indice = Calculs.indiceSuivant(dernierIndice),
             statut = Statut.BROUILLON,
             dateDevis = System.currentTimeMillis(),
             dateEnvoi = null,
@@ -249,9 +288,12 @@ object OperationsDevis {
     }
 
     /** Vérification « mode pro » après enregistrement : ce qui cloche, en clair. */
-    fun verifier(devis: Devis, lignes: List<Ligne>, client: Client?): List<String> {
+    fun verifier(devis: Devis, lignes: List<Ligne>, client: Client?, franchiseTva: Boolean = false): List<String> {
         val alertes = mutableListOf<String>()
         val totaux = Calculs.totaux(lignes, devis.remiseGlobalePct)
+        if (franchiseTva && lignes.any { it.tauxTva > 0 }) {
+            alertes.add("Franchise en base de TVA : des lignes portent encore de la TVA.")
+        }
         if (lignes.isEmpty()) alertes.add("Aucune ligne : le devis ne peut pas être envoyé.")
         if (lignes.any { it.quantite <= 0 }) alertes.add("Une ligne a une quantité nulle.")
         if (lignes.any { it.prixUnitaireHT < 0 }) alertes.add("Une ligne a un prix négatif.")

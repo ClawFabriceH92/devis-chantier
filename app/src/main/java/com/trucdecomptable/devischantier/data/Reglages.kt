@@ -155,9 +155,19 @@ class Reglages(context: Context) {
         set(v) = prefs.edit().putString("modele_comptable_corps", v).apply()
 
     // ---- intelligence artificielle (F-37, §4.4) ----
+    /**
+     * LOCAL (modèle embarqué sur le téléphone, défaut), CLAUDE ou AUTRE (service
+     * compatible OpenAI). Les installations antérieures à la 1.1 n'avaient que
+     * les deux derniers : une clé déjà enregistrée garde son fournisseur.
+     */
     var iaFournisseur: String
-        get() = prefs.getString("ia_fournisseur", "CLAUDE").orEmpty()
+        get() = prefs.getString("ia_fournisseur", null)
+            ?: if (prefs.contains("ia_cle_chiffree")) "CLAUDE" else "LOCAL"
         set(v) = prefs.edit().putString("ia_fournisseur", v).apply()
+    /** L'artisan a accepté de télécharger le modèle (1 Go) sur un réseau facturé. */
+    var iaLocalDonneesMobiles: Boolean
+        get() = prefs.getBoolean("ia_local_donnees_mobiles", false)
+        set(v) = prefs.edit().putBoolean("ia_local_donnees_mobiles", v).apply()
     var iaModele: String
         get() = prefs.getString("ia_modele", "").orEmpty()
         set(v) = prefs.edit().putString("ia_modele", v).apply()
@@ -260,6 +270,32 @@ class Reglages(context: Context) {
         get() = prefs.getString("version_ignoree", "").orEmpty()
         set(v) = prefs.edit().putString("version_ignoree", v).apply()
 
+    /**
+     * Les réglages tels qu'ils partent dans la sauvegarde : tout sauf les
+     * secrets chiffrés par le Keystore (inutilisables sur un autre téléphone)
+     * et l'état propre à l'appareil.
+     */
+    fun exporter(): Map<String, Any?> =
+        prefs.all.filterKeys { it !in CLES_PRIVEES }
+
+    fun importer(valeurs: Map<String, Any?>) {
+        val edition = prefs.edit()
+        for ((cle, valeur) in valeurs) {
+            if (cle in CLES_PRIVEES) continue
+            when (valeur) {
+                is Boolean -> edition.putBoolean(cle, valeur)
+                is Int -> edition.putInt(cle, valeur)
+                is Long -> edition.putLong(cle, valeur)
+                is Float -> edition.putFloat(cle, valeur)
+                is Double -> edition.putFloat(cle, valeur.toFloat())
+                is String -> edition.putString(cle, valeur)
+                null -> edition.remove(cle)
+                else -> edition.putString(cle, valeur.toString())
+            }
+        }
+        edition.apply()
+    }
+
     fun resumeEntreprise(): String = listOf(entrepriseNom, adresseEntreprise)
         .filter { it.isNotBlank() }
         .joinToString(" · ")
@@ -274,6 +310,13 @@ class Reglages(context: Context) {
         Diag.record("reglages", "$action ($heure)")
     }
 }
+
+/** Clés qui ne quittent jamais le téléphone. */
+val CLES_PRIVEES = setOf(
+    "ia_cle_chiffree", "ia_cle_non_securisee", "sauvegarde_mdp_chiffre",
+    "sauvegarde_dossier", "sauvegarde_derniere", "version_ignoree",
+    "logo_chemin", "attestation_chemin",
+)
 
 object Declencheur {
     const val ACCEPTATION = "ACCEPTATION"

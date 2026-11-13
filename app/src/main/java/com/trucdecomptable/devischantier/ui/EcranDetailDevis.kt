@@ -91,16 +91,30 @@ fun EcranDetailDevis(
     val client = clients.firstOrNull { it.id == courant.clientId }
     val totaux = Calculs.totaux(lignes, courant.remiseGlobalePct)
 
-    fun preparerEtEnvoyer(destinataires: List<String>, sujet: String, corps: String) {
+    /**
+     * Prépare le PDF puis ouvre l'application de messagerie. [apresEnvoi] n'est
+     * exécuté que si le document a pu être préparé : un devis aux mentions
+     * incomplètes ne passe pas « envoyé ». Le fichier de données (JSON) ne part
+     * qu'au comptable.
+     */
+    fun preparerEtEnvoyer(
+        destinataires: List<String>,
+        sujet: String,
+        corps: String,
+        avecDonnees: Boolean,
+        apresEnvoi: suspend () -> Unit,
+    ) {
         portee.launch(Dispatchers.IO) {
             val preparation = OperationsDevis.preparer(contexte, courant, lignes, client, reglages)
+            if (preparation.ok) apresEnvoi()
             withContext(Dispatchers.Main) {
                 if (!preparation.ok) {
                     manquantes = preparation.manquantes
                     message = preparation.message
                     return@withContext
                 }
-                val fichiers = listOfNotNull(preparation.pdf, preparation.donnees)
+                manquantes = emptyList()
+                val fichiers = listOfNotNull(preparation.pdf, preparation.donnees.takeIf { avecDonnees })
                 Partage.envoyer(contexte, fichiers, destinataires, sujet, corps)
             }
         }
@@ -202,8 +216,7 @@ fun EcranDetailDevis(
                             Formats.euros(totaux.totalTTC), Formats.euros(totaux.totalHT),
                             Formats.date(courant.dateLimite), reglages.entrepriseNom, Formats.date(courant.dateDevis),
                         )
-                        preparerEtEnvoyer(listOfNotNull(client?.email), objet, corps)
-                        portee.launch(Dispatchers.IO) {
+                        preparerEtEnvoyer(listOfNotNull(client?.email), objet, corps, avecDonnees = false) {
                             OperationsDevis.marquerEnvoye(dao, courant, client, lignes, reglages)
                         }
                     },
@@ -211,7 +224,21 @@ fun EcranDetailDevis(
                 Spacer(Modifier.height(10.dp))
                 BoutonSecondaire(
                     "Faire signer sur place (bon pour accord)",
-                    onClick = { signatureDemandee = true },
+                    onClick = {
+                        // Signer sur place vaut remise du devis au client : un brouillon
+                        // passe d'abord par le contrôle des mentions obligatoires.
+                        val bloquantes = if (courant.statut == Statut.BROUILLON) {
+                            OperationsDevis.controler(courant, client, lignes, reglages)
+                        } else {
+                            emptyList()
+                        }
+                        if (bloquantes.isNotEmpty()) {
+                            manquantes = bloquantes
+                            message = "Mentions obligatoires incomplètes : le devis ne peut pas être signé en l'état."
+                        } else {
+                            signatureDemandee = true
+                        }
+                    },
                     icone = Icons.Default.Edit,
                 )
                 Spacer(Modifier.height(10.dp))
@@ -222,6 +249,8 @@ fun EcranDetailDevis(
                             if (reglages.copieArtisan && reglages.email.isNotBlank()) listOf(reglages.email) else emptyList()
                         if (destinataires.isEmpty()) {
                             message = "Aucun destinataire administratif : renseignez l'email du comptable dans les réglages."
+                        } else if (courant.statut == Statut.BROUILLON) {
+                            message = "Envoyez d'abord le devis au client, ou faites-le signer : un brouillon ne part pas au comptable."
                         } else {
                             val objet = Partage.modele(
                                 reglages.modeleComptableObjet, courant.numero, courant.clientNom, courant.objet,
@@ -233,8 +262,7 @@ fun EcranDetailDevis(
                                 Formats.euros(totaux.totalTTC), Formats.euros(totaux.totalHT),
                                 Formats.date(courant.dateLimite), reglages.entrepriseNom, Formats.date(courant.dateDevis),
                             )
-                            preparerEtEnvoyer(destinataires, objet, corps)
-                            portee.launch(Dispatchers.IO) {
+                            preparerEtEnvoyer(destinataires, objet, corps, avecDonnees = true) {
                                 OperationsDevis.marquerTransmis(dao, courant, destinataires.joinToString(", "))
                             }
                         }
@@ -310,20 +338,31 @@ fun EcranDetailDevis(
     }
 
     if (signatureDemandee) {
-        DialogueSignature(
-            onValider = { bitmap ->
-                val fichier = File(File(contexte.filesDir, "signatures").apply { mkdirs() }, "signature-${courant.numero}.png")
-                runCatching {
-                    FileOutputStream(fichier).use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
-                }
-                portee.launch(Dispatchers.IO) {
-                    OperationsDevis.marquerAccepte(dao, courant, fichier.absolutePath)
-                }
-                message = "Bon pour accord enregistré le ${Formats.date(System.currentTimeMillis())}."
-                signatureDemandee = false
-            },
-            onFermer = { signatureDemandee = false },
-        )
+        // Un brouillon signé est d'abord verrouillé (mentions figées), puis marqué accepté.
+        run {
+            DialogueSignature(
+                onValider = { bitmap ->
+                    val fichier = File(
+                        File(contexte.filesDir, "signatures").apply { mkdirs() },
+                        "signature-${courant.numero}-${courant.indice}.png",
+                    )
+                    runCatching {
+                        FileOutputStream(fichier).use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                    }
+                    portee.launch(Dispatchers.IO) {
+                        val verrouille = if (courant.statut == Statut.BROUILLON) {
+                            OperationsDevis.marquerEnvoye(dao, courant, client, lignes, reglages)
+                        } else {
+                            courant
+                        }
+                        OperationsDevis.marquerAccepte(dao, verrouille, fichier.absolutePath)
+                    }
+                    message = "Bon pour accord enregistré le ${Formats.date(System.currentTimeMillis())}."
+                    signatureDemandee = false
+                },
+                onFermer = { signatureDemandee = false },
+            )
+        }
     }
 
     if (confirmationSuppression) {
@@ -348,6 +387,7 @@ fun EcranDetailDevis(
 fun DialogueSignature(onValider: (Bitmap) -> Unit, onFermer: () -> Unit) {
     val traits = remember { mutableListOf<List<Offset>>() }
     var traitCourant by remember { mutableStateOf(listOf<Offset>()) }
+    var tailleZone by remember { mutableStateOf(androidx.compose.ui.geometry.Size(600f, 300f)) }
     AlertDialog(
         onDismissRequest = onFermer,
         title = { Text("Signature du client", style = MaterialTheme.typography.titleLarge) },
@@ -375,6 +415,7 @@ fun DialogueSignature(onValider: (Bitmap) -> Unit, onFermer: () -> Unit) {
                                 }
                             },
                     ) {
+                        tailleZone = size
                         drawRect(Color.White)
                         drawRect(Color.LightGray, style = Stroke(width = 2f))
                         traits.forEach { trait ->
@@ -394,7 +435,7 @@ fun DialogueSignature(onValider: (Bitmap) -> Unit, onFermer: () -> Unit) {
                 "Valider la signature",
                 onClick = {
                     val tous = traits + listOfNotNull(traitCourant.takeIf { it.isNotEmpty() })
-                    onValider(rendreBitmap(tous))
+                    onValider(rendreBitmap(tous, tailleZone))
                 },
                 hauteur = 56.dp,
             )
@@ -403,9 +444,14 @@ fun DialogueSignature(onValider: (Bitmap) -> Unit, onFermer: () -> Unit) {
     )
 }
 
-private fun rendreBitmap(traits: List<List<Offset>>): Bitmap {
+/** Les points sont en pixels de l'écran : on les ramène à l'image 600 × 300, sans rien couper. */
+private fun rendreBitmap(traits: List<List<Offset>>, zone: androidx.compose.ui.geometry.Size): Bitmap {
     val largeur = 600
     val hauteur = 300
+    val echelle = minOf(
+        if (zone.width > 0f) largeur / zone.width else 1f,
+        if (zone.height > 0f) hauteur / zone.height else 1f,
+    )
     val bitmap = Bitmap.createBitmap(largeur, hauteur, Bitmap.Config.ARGB_8888)
     val toile = android.graphics.Canvas(bitmap)
     toile.drawColor(android.graphics.Color.WHITE)
@@ -419,7 +465,9 @@ private fun rendreBitmap(traits: List<List<Offset>>): Bitmap {
     traits.forEach { trait ->
         val chemin = android.graphics.Path()
         trait.forEachIndexed { index, point ->
-            if (index == 0) chemin.moveTo(point.x, point.y) else chemin.lineTo(point.x, point.y)
+            val x = point.x * echelle
+            val y = point.y * echelle
+            if (index == 0) chemin.moveTo(x, y) else chemin.lineTo(x, y)
         }
         toile.drawPath(chemin, pinceau)
     }
