@@ -93,20 +93,19 @@ fun EcranClients(
     }
 
     Column(Modifier.fillMaxSize()) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text("Clients", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
-            IconButton(
-                onClick = { clientEnEdition = Client(nom = "", professionnel = false) },
-                modifier = Modifier.size(56.dp),
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "Nouveau client", modifier = Modifier.size(30.dp))
-            }
-        }
+        EnTeteEcran(
+            titre = "Clients",
+            sousTitre = if (clients.isEmpty()) "Particuliers et entreprises, remplis depuis l'Annuaire de l'État" else "${clients.size} clients",
+            action = {
+                IconButton(
+                    onClick = { clientEnEdition = Client(nom = "", professionnel = false) },
+                    modifier = Modifier.size(56.dp),
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "Nouveau client", tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(30.dp))
+                }
+            },
+        )
+        Spacer(Modifier.height(10.dp))
         Column(
             Modifier
                 .weight(1f)

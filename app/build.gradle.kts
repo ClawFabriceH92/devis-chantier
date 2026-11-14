@@ -133,6 +133,8 @@ android {
     // permettent de tester la logique qui journalise (marge, dictée, sauvegarde).
     testOptions {
         unitTests.isReturnDefaultValues = true
+        // Captures d'écran des composants en JVM (Robolectric) : voir CapturesEcransTest.
+        unitTests.isIncludeAndroidResources = true
     }
 }
 
@@ -167,6 +169,12 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     // org.json is a stub in unit tests otherwise
     testImplementation("org.json:json:20231013")
+    // Rendu des écrans Compose en JVM pour les captures de maquette (CapturesEcransTest,
+    // activé par la variable CAPTURES_ECRANS=1, ignoré sinon).
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("androidx.test.ext:junit:1.2.1")
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    testImplementation("androidx.compose.ui:ui-test-manifest")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test:core:1.6.1")
     androidTestImplementation("androidx.test:runner:1.6.2")

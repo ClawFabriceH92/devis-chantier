@@ -120,17 +120,16 @@ fun EcranArticles(
     }
 
     Column(Modifier.fillMaxSize()) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text("Articles", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
-            IconButton(onClick = { enEdition = Article(libelle = "") }, modifier = Modifier.size(56.dp)) {
-                Icon(Icons.Default.Add, contentDescription = "Nouvel article", modifier = Modifier.size(30.dp))
-            }
-        }
+        EnTeteEcran(
+            titre = "Articles",
+            sousTitre = if (articles.isEmpty()) "Votre catalogue de prix : il nourrit la saisie et la dictée" else "${articles.size} articles au catalogue",
+            action = {
+                IconButton(onClick = { enEdition = Article(libelle = "") }, modifier = Modifier.size(56.dp)) {
+                    Icon(Icons.Default.Add, contentDescription = "Nouvel article", tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(30.dp))
+                }
+            },
+        )
+        Spacer(Modifier.height(10.dp))
         Column(
             Modifier
                 .weight(1f)

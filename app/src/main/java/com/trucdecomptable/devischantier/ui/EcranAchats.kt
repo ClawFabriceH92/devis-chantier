@@ -65,7 +65,7 @@ fun EcranAchats(
     val margeReelle = devisAcceptes.sumOf { it.totalHT - it.coutAchat }
 
     Column(Modifier.fillMaxSize()) {
-        EnTeteRetour("Achats et marge", onRetour)
+        EnTeteEcran("Achats et marge", sousTitre = "Vos prix d'achat et la marge de chaque devis. Jamais sur le PDF client.", onRetour = onRetour)
         Column(
             Modifier
                 .weight(1f)

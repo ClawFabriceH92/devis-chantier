@@ -37,7 +37,9 @@ class ParcoursInstrumenteTest {
         formeJuridique = "Entreprise individuelle"
         telephone = "0102030405"
         email = "contact@plomberie-martin.fr"
-        regimeTva = "FRANCHISE"
+        // Assujetti : les lignes à 10 % de TVA ci-dessous produisent bien une TVA.
+        // (En franchise en base, OperationsDevis.enregistrer ramène les lignes à 0 %.)
+        regimeTva = "ASSUJETTI"
         assureurNom = "AXA IARD"
         assureurCoordonnees = "12 avenue de la Paix, 75010 Paris"
         couvertureGeo = "France métropolitaine"
@@ -88,12 +90,22 @@ class ParcoursInstrumenteTest {
         )
         val lignes = dao.lignesListe(devisId)
         val courant = dao.devis(devisId)!!
-        val enregistre = OperationsDevis.enregistrer(courant, lignes, dao)
+        val enregistre = OperationsDevis.enregistrer(courant, lignes, dao, franchiseTva = !reglages.assujetti)
 
         // Totaux : 2 × 85 + 3 × 48 = 314 HT, TVA 10 % = 31,40, TTC = 345,40
         assertEquals(314.0, enregistre.totalHT, 0.01)
         assertEquals(31.4, enregistre.totalTVA, 0.01)
         assertEquals(345.4, enregistre.totalTTC, 0.01)
+
+        // En franchise en base, les mêmes lignes ne portent plus de TVA : HT = TTC.
+        val enFranchise = OperationsDevis.enregistrer(courant, lignes, dao, franchiseTva = true)
+        assertEquals(314.0, enFranchise.totalHT, 0.01)
+        assertEquals(0.0, enFranchise.totalTVA, 0.01)
+        assertEquals(314.0, enFranchise.totalTTC, 0.01)
+        assertTrue(dao.lignesListe(devisId).all { it.tauxTva == 0.0 })
+        // On remet les lignes à 10 % pour la suite du parcours (PDF avec TVA).
+        dao.lignesListe(devisId).forEach { dao.enregistrerLigne(it.copy(tauxTva = 10.0)) }
+        OperationsDevis.enregistrer(courant, dao.lignesListe(devisId), dao)
 
         // Contrôle des mentions : elles doivent toutes être réunies.
         val manquantes = OperationsDevis.controler(enregistre, client, lignes, reglages)

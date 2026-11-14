@@ -97,6 +97,32 @@ les marges ne partent jamais, dans aucun des cas.
   (grammaire, présélection, relecture, en-tête GGUF, reprise de téléchargement).
 - QA visuelle sur émulateur Android dans la CI (`scripts/smoke-test.sh`).
 
+## Ergonomie (v1.1)
+
+Refonte pour qu'un artisan comprenne en un coup d'œil ce qu'il a à faire :
+
+- **Un code couleur tenu partout** : le bleu structure (en-têtes, navigation),
+  l'orange est réservé à l'action à faire maintenant, le vert dit « c'est bon »,
+  le rouge « attention ». Les statuts sont des pastilles pâles à texte sombre,
+  lisibles au soleil, reprises en bande de couleur sur chaque carte de devis.
+- **Accueil** : chiffres clés (en attente, à relancer, acceptés ce mois), un
+  bandeau « Prochaine étape » quand des clients sont à relancer, des cartes qui
+  montrent d'abord le client et le montant, deux gros boutons fixes sous le
+  pouce (« Nouveau devis », « Dicter »), un état vide qui explique quoi faire.
+- **Détail d'un devis** : le montant TTC en grand, puis « Prochaine étape »
+  calculée selon le statut (envoyer, faire signer, relancer, transmettre,
+  facturer, nouvelle version) avec un seul bouton orange ; les autres actions
+  en second rang. Logique testée dans `devis/ProchaineEtape.kt`.
+- **Réglages** : un sommaire de rubriques avec leur état en une ligne (ce qui
+  manque pour qu'un devis parte est en orange), un contrôle des mentions
+  obligatoires en tête, puis une rubrique par écran. Rubrique
+  « Réinitialisation » (assistant de démarrage, valeurs par défaut).
+- **Saisie** : barre fixe avec le total TTC et le bouton principal ; **dictée** :
+  un grand micro rond, orange pendant l'écoute ; **assistant de démarrage** :
+  « Étape 1 sur 4 », une question par écran, choix cochés.
+- Les maquettes rendues en JVM (Robolectric, `CapturesEcransTest`, variable
+  `CAPTURES_ECRANS=1`) sont dans `docs/maquettes/`.
+
 ## Corrections de la v1.1
 
 Revue complète du code (novembre 2026). Principales corrections :

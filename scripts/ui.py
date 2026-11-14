@@ -200,14 +200,39 @@ def cmd_form(etiquette, valeur):
     return 1
 
 
+def cmd_swipe_bas():
+    taille = adb("shell", "wm", "size").strip()
+    match = re.search(r"(\d+)x(\d+)", taille)
+    largeur, hauteur = (int(match.group(1)), int(match.group(2))) if match else (1080, 2400)
+    adb(
+        "shell", "input", "swipe",
+        str(largeur // 2), str(int(hauteur * 0.3)),
+        str(largeur // 2), str(int(hauteur * 0.7)), "300",
+    )
+    subprocess.run(["sleep", "1"], check=False)
+    print("swipe vers le bas")
+    return 0
+
+
 def cmd_defiler_vers(texte, max_essais=8):
-    """Fait défiler jusqu'à ce que le texte soit visible (listes et formulaires longs)."""
+    """Fait défiler jusqu'à ce que le texte soit visible (listes et formulaires longs).
+
+    On descend d'abord ; si le texte n'apparaît pas, on remonte : un titre
+    court peut être passé d'un coup de pouce quand la page est à peine plus
+    haute que l'écran.
+    """
     for essai in range(1, max_essais + 1):
         racine = dump_xml()
         if trouver(racine, texte) is not None:
             print(f"OK  « {texte} » visible après {essai - 1} défilement(s)")
             return 0
         cmd_swipe_haut()
+    for essai in range(1, max_essais + 1):
+        cmd_swipe_bas()
+        racine = dump_xml()
+        if trouver(racine, texte) is not None:
+            print(f"OK  « {texte} » visible en remontant ({essai} défilement(s))")
+            return 0
     print(f"KO  « {texte} » reste introuvable après défilement")
     return 1
 

@@ -21,7 +21,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.background
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -51,32 +53,47 @@ fun EcranOnboarding(
     var etape by remember { mutableStateOf(0) }
     var metier by remember { mutableStateOf("plombier") }
     var message by remember { mutableStateOf("") }
+    // Les préférences ne notifient pas Compose : ce compteur, lu plus bas, force le rafraîchissement des choix.
+    var version by remember { mutableStateOf(0) }
 
     val etapes = 4
+
+    @Suppress("UNUSED_VARIABLE")
+    val revision = version
 
     fun terminer() {
         reglages.onboardingFait = true
         onTermine()
     }
 
+    val titres = listOf("Votre métier", "Votre entreprise", "TVA et assurance", "Qui établit la facture ?")
+
     Column(Modifier.fillMaxSize()) {
         Column(
             Modifier
                 .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.primary)
                 .padding(16.dp),
         ) {
-            Text("Devis Chantier", style = MaterialTheme.typography.headlineMedium)
             Text(
-                "Quelques écrans pour être prêt à faire votre premier devis.",
+                if (etape == 0) "Bienvenue dans Devis Chantier" else "Devis Chantier",
+                style = MaterialTheme.typography.headlineSmall,
+                color = Color.White,
+            )
+            Text(
+                "Étape ${etape + 1} sur $etapes · ${titres[etape]}",
                 style = MaterialTheme.typography.bodyMedium,
-                color = Couleurs.gris,
+                color = Color.White.copy(alpha = 0.9f),
             )
             Spacer(Modifier.height(10.dp))
             LinearProgressIndicator(
                 progress = { (etape + 1f) / etapes },
                 modifier = Modifier.fillMaxWidth(),
+                color = Couleurs.orange,
+                trackColor = Color.White.copy(alpha = 0.3f),
             )
         }
+        Spacer(Modifier.height(12.dp))
         Column(
             Modifier
                 .weight(1f)
@@ -84,7 +101,7 @@ fun EcranOnboarding(
                 .padding(horizontal = 16.dp),
         ) {
             when (etape) {
-                0 -> CarteBloc(titre = "1. Votre métier") {
+                0 -> CarteBloc(titre = "Votre métier", sousTitre = "Deux minutes suffisent. Tout se corrige ensuite dans les réglages.") {
                     Text(
                         "Un catalogue de départ sera installé avec des articles et des prix : " +
                             "vous ajusterez les tarifs au lieu de tout créer.",
@@ -92,10 +109,11 @@ fun EcranOnboarding(
                     )
                     Spacer(Modifier.height(10.dp))
                     Catalogues.METIERS.forEach { (id, libelle) ->
-                        BoutonSecondaire(
-                            (if (metier == id) "✓ " else "") + libelle,
+                        BoutonChoix(
+                            libelle,
+                            selectionne = metier == id,
                             onClick = { metier = id },
-                            modifier = Modifier.padding(vertical = 2.dp),
+                            modifier = Modifier.padding(vertical = 3.dp),
                         )
                     }
                     if (message.isNotBlank()) {
@@ -104,7 +122,7 @@ fun EcranOnboarding(
                     }
                 }
 
-                1 -> CarteBloc(titre = "2. Votre entreprise") {
+                1 -> CarteBloc(titre = "Votre entreprise", sousTitre = "Ce qui figure en tête de vos devis.") {
                     Text(
                         "Tapez votre nom ou votre SIREN : la fiche est reprise de l'Annuaire des " +
                             "Entreprises de l'État. Vous pourrez tout corriger dans la roue dentée.",
@@ -145,12 +163,19 @@ fun EcranOnboarding(
                     }
                 }
 
-                2 -> CarteBloc(titre = "3. TVA et assurance") {
-                    BoutonSecondaire(
-                        if (reglages.assujetti) "Assujetti à la TVA" else "Franchise en base de TVA",
-                        onClick = {
-                            reglages.regimeTva = if (reglages.assujetti) "FRANCHISE" else "ASSUJETTI"
-                        },
+                2 -> CarteBloc(titre = "TVA et assurance", sousTitre = "Deux mentions obligatoires sur chaque devis.") {
+                    BoutonChoix(
+                        "Franchise en base de TVA",
+                        selectionne = !reglages.assujetti,
+                        onClick = { reglages.regimeTva = "FRANCHISE"; version++ },
+                        sousTexte = "Pas de TVA sur les devis",
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    BoutonChoix(
+                        "Assujetti à la TVA",
+                        selectionne = reglages.assujetti,
+                        onClick = { reglages.regimeTva = "ASSUJETTI"; version++ },
+                        sousTexte = "TVA calculée sur chaque ligne",
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
@@ -172,7 +197,7 @@ fun EcranOnboarding(
                     )
                 }
 
-                else -> CarteBloc(titre = "4. Qui établit la facture ?") {
+                else -> CarteBloc(titre = "Qui établit la facture ?", sousTitre = "Le devis accepté part chez cette personne.") {
                     Text(
                         "Le devis part chez votre comptable ou votre assistante, qui établit la facture. " +
                             "Renseignez son adresse email : elle recevra le PDF et les données du devis.",
@@ -207,7 +232,7 @@ fun EcranOnboarding(
         }
         Column(Modifier.padding(16.dp)) {
             if (etape < etapes - 1) {
-                BoutonGeant(
+                BoutonPrincipal(
                     "Continuer",
                     onClick = {
                         if (etape == 0) {
@@ -229,7 +254,7 @@ fun EcranOnboarding(
                     },
                 )
             } else {
-                BoutonGeant("Terminer et faire mon premier devis", onClick = { terminer() })
+                BoutonPrincipal("Terminer et faire mon premier devis", onClick = { terminer() })
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                 TextButton(onClick = { terminer() }) {

@@ -19,6 +19,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
@@ -49,6 +50,7 @@ import com.trucdecomptable.devischantier.data.Statut
 import com.trucdecomptable.devischantier.devis.Calculs
 import com.trucdecomptable.devischantier.devis.Mentions
 import com.trucdecomptable.devischantier.devis.OperationsDevis
+import com.trucdecomptable.devischantier.devis.ProchaineEtape
 import com.trucdecomptable.devischantier.util.Diag
 import com.trucdecomptable.devischantier.util.Formats
 import kotlinx.coroutines.Dispatchers
@@ -120,8 +122,113 @@ fun EcranDetailDevis(
         }
     }
 
+    val etape = ProchaineEtape.pour(courant, lignes.size, reglages.relanceJoursApres)
+
+    fun apercu() {
+        portee.launch(Dispatchers.IO) {
+            val preparation = OperationsDevis.preparer(contexte, courant, lignes, client, reglages)
+            withContext(Dispatchers.Main) {
+                if (preparation.ok && preparation.pdf != null) {
+                    Partage.ouvrirPdf(contexte, preparation.pdf)
+                } else {
+                    manquantes = preparation.manquantes
+                    message = if (preparation.manquantes.isEmpty()) "Aperçu impossible : ${preparation.message}" else "Mentions obligatoires incomplètes"
+                }
+            }
+        }
+    }
+
+    fun envoyerAuClient() {
+        val objet = Partage.modele(
+            reglages.modeleClientObjet, courant.numero, courant.clientNom, courant.objet,
+            Formats.euros(totaux.totalTTC), Formats.euros(totaux.totalHT),
+            Formats.date(courant.dateLimite), reglages.entrepriseNom, Formats.date(courant.dateDevis),
+        )
+        val corps = Partage.modele(
+            reglages.modeleClientCorps, courant.numero, courant.clientNom, courant.objet,
+            Formats.euros(totaux.totalTTC), Formats.euros(totaux.totalHT),
+            Formats.date(courant.dateLimite), reglages.entrepriseNom, Formats.date(courant.dateDevis),
+        )
+        preparerEtEnvoyer(listOfNotNull(client?.email), objet, corps, avecDonnees = false) {
+            OperationsDevis.marquerEnvoye(dao, courant, client, lignes, reglages)
+        }
+    }
+
+    fun demanderSignature() {
+        // Signer sur place vaut remise du devis au client : un brouillon
+        // passe d'abord par le contrôle des mentions obligatoires.
+        val bloquantes = if (courant.statut == Statut.BROUILLON) {
+            OperationsDevis.controler(courant, client, lignes, reglages)
+        } else {
+            emptyList()
+        }
+        if (bloquantes.isNotEmpty()) {
+            manquantes = bloquantes
+            message = "Mentions obligatoires incomplètes : le devis ne peut pas être signé en l'état."
+        } else {
+            signatureDemandee = true
+        }
+    }
+
+    fun transmettre() {
+        val destinataires = reglages.destinatairesComptable() +
+            if (reglages.copieArtisan && reglages.email.isNotBlank()) listOf(reglages.email) else emptyList()
+        if (destinataires.isEmpty()) {
+            message = "Aucun destinataire administratif : renseignez l'email du comptable dans les réglages."
+        } else if (courant.statut == Statut.BROUILLON) {
+            message = "Envoyez d'abord le devis au client, ou faites-le signer : un brouillon ne part pas au comptable."
+        } else {
+            val objet = Partage.modele(
+                reglages.modeleComptableObjet, courant.numero, courant.clientNom, courant.objet,
+                Formats.euros(totaux.totalTTC), Formats.euros(totaux.totalHT),
+                Formats.date(courant.dateLimite), reglages.entrepriseNom, Formats.date(courant.dateDevis),
+            )
+            val corps = Partage.modele(
+                reglages.modeleComptableCorps, courant.numero, courant.clientNom, courant.objet,
+                Formats.euros(totaux.totalTTC), Formats.euros(totaux.totalHT),
+                Formats.date(courant.dateLimite), reglages.entrepriseNom, Formats.date(courant.dateDevis),
+            )
+            preparerEtEnvoyer(destinataires, objet, corps, avecDonnees = true) {
+                OperationsDevis.marquerTransmis(dao, courant, destinataires.joinToString(", "))
+            }
+        }
+    }
+
+    fun relancer() {
+        val objet = "Relance devis ${courant.numero}"
+        val corps = "Bonjour,\n\nJe me permets de revenir vers vous au sujet du devis " +
+            "${courant.numero} (${Formats.euros(totaux.totalTTC)} TTC), valable jusqu'au " +
+            "${Formats.date(courant.dateLimite)}.\n\nBien cordialement,\n${reglages.entrepriseNom}"
+        Partage.envoyerTexte(contexte, client?.email.orEmpty(), objet, corps)
+        portee.launch(Dispatchers.IO) { OperationsDevis.marquerRelance(dao, courant, "email") }
+        relanceFaite = true
+    }
+
+    fun executer(action: String) {
+        when (action) {
+            ProchaineEtape.MODIFIER -> onModifier()
+            ProchaineEtape.ENVOYER -> envoyerAuClient()
+            ProchaineEtape.SIGNER -> demanderSignature()
+            ProchaineEtape.TRANSMETTRE -> transmettre()
+            ProchaineEtape.RELANCER -> relancer()
+            ProchaineEtape.FACTURER -> {
+                portee.launch(Dispatchers.IO) { OperationsDevis.marquerFacture(dao, courant) }
+                message = "Devis marqué facturé."
+            }
+            ProchaineEtape.VERSION -> {
+                portee.launch(Dispatchers.IO) { OperationsDevis.nouvelleVersion(dao, courant.id) }
+                message = "Nouvelle version créée en brouillon (indice suivant)."
+            }
+            else -> apercu()
+        }
+    }
+
     Column(Modifier.fillMaxSize()) {
-        EnTeteRetour("Devis ${courant.numero}", onRetour)
+        EnTeteEcran(
+            titre = "Devis ${courant.numero}",
+            sousTitre = courant.clientNom.ifBlank { "Client à renseigner" } + if (courant.indice != "A") " · indice ${courant.indice}" else "",
+            onRetour = onRetour,
+        )
         Column(
             Modifier
                 .weight(1f)
@@ -129,7 +236,7 @@ fun EcranDetailDevis(
                 .padding(12.dp),
         ) {
             CarteBloc {
-                Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     BadgeStatut(courant.statut)
                     Text(
                         "indice ${courant.indice}",
@@ -142,12 +249,14 @@ fun EcranDetailDevis(
                 if (courant.objet.isNotBlank()) {
                     Text(courant.objet, style = MaterialTheme.typography.bodyMedium, color = Couleurs.gris)
                 }
+                Spacer(Modifier.height(10.dp))
+                Text("Total TTC", style = MaterialTheme.typography.bodyMedium, color = Couleurs.gris)
+                Text(Formats.euros(totaux.totalTTC), fontSize = 32.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.height(8.dp))
                 LigneValeur("Total HT", Formats.euros(totaux.totalHT))
                 totaux.tvaParTaux.forEach { (taux, montant) ->
                     LigneValeur("TVA ${Formats.nombre(taux)} %", Formats.euros(montant))
                 }
-                LigneValeur("Total TTC", Formats.euros(totaux.totalTTC), gras = true)
                 if (courant.acomptePct > 0) {
                     LigneValeur(
                         "Acompte ${Formats.nombre(courant.acomptePct)} %",
@@ -166,6 +275,14 @@ fun EcranDetailDevis(
                 BlocAlerte(message)
                 Spacer(Modifier.height(8.dp))
             }
+            BandeauEtape(
+                titre = etape.titre,
+                texte = etape.texte,
+                libelleBouton = etape.libelleBouton,
+                onClick = { executer(etape.action) },
+            )
+            Spacer(Modifier.height(12.dp))
+
             if (manquantes.isNotEmpty()) {
                 CarteBloc(titre = "Mentions obligatoires manquantes") {
                     manquantes.forEach { Text("• $it", style = MaterialTheme.typography.bodyMedium) }
@@ -179,145 +296,43 @@ fun EcranDetailDevis(
                 Spacer(Modifier.height(12.dp))
             }
 
-            CarteBloc(titre = "Actions") {
-                BoutonGeant(
-                    "Aperçu du PDF",
-                    onClick = {
-                        portee.launch(Dispatchers.IO) {
-                            val preparation = OperationsDevis.preparer(contexte, courant, lignes, client, reglages)
-                            withContext(Dispatchers.Main) {
-                                if (preparation.ok && preparation.pdf != null) {
-                                    Partage.ouvrirPdf(contexte, preparation.pdf)
-                                } else {
-                                    manquantes = preparation.manquantes
-                                    message = if (preparation.manquantes.isEmpty()) {
-                                        "Aperçu impossible : ${preparation.message}"
-                                    } else {
-                                        "Mentions obligatoires incomplètes"
-                                    }
-                                }
-                            }
-                        }
-                    },
-                )
-                Spacer(Modifier.height(10.dp))
-                BoutonGeant(
-                    "Envoyer au client",
-                    icone = Icons.Default.Share,
-                    couleur = Couleurs.bleuClair,
-                    onClick = {
-                        val objet = Partage.modele(
-                            reglages.modeleClientObjet, courant.numero, courant.clientNom, courant.objet,
-                            Formats.euros(totaux.totalTTC), Formats.euros(totaux.totalHT),
-                            Formats.date(courant.dateLimite), reglages.entrepriseNom, Formats.date(courant.dateDevis),
-                        )
-                        val corps = Partage.modele(
-                            reglages.modeleClientCorps, courant.numero, courant.clientNom, courant.objet,
-                            Formats.euros(totaux.totalTTC), Formats.euros(totaux.totalHT),
-                            Formats.date(courant.dateLimite), reglages.entrepriseNom, Formats.date(courant.dateDevis),
-                        )
-                        preparerEtEnvoyer(listOfNotNull(client?.email), objet, corps, avecDonnees = false) {
-                            OperationsDevis.marquerEnvoye(dao, courant, client, lignes, reglages)
-                        }
-                    },
-                )
-                Spacer(Modifier.height(10.dp))
-                BoutonSecondaire(
-                    "Faire signer sur place (bon pour accord)",
-                    onClick = {
-                        // Signer sur place vaut remise du devis au client : un brouillon
-                        // passe d'abord par le contrôle des mentions obligatoires.
-                        val bloquantes = if (courant.statut == Statut.BROUILLON) {
-                            OperationsDevis.controler(courant, client, lignes, reglages)
-                        } else {
-                            emptyList()
-                        }
-                        if (bloquantes.isNotEmpty()) {
-                            manquantes = bloquantes
-                            message = "Mentions obligatoires incomplètes : le devis ne peut pas être signé en l'état."
-                        } else {
-                            signatureDemandee = true
-                        }
-                    },
-                    icone = Icons.Default.Edit,
-                )
-                Spacer(Modifier.height(10.dp))
-                BoutonSecondaire(
-                    "Transmettre au comptable",
-                    onClick = {
-                        val destinataires = reglages.destinatairesComptable() +
-                            if (reglages.copieArtisan && reglages.email.isNotBlank()) listOf(reglages.email) else emptyList()
-                        if (destinataires.isEmpty()) {
-                            message = "Aucun destinataire administratif : renseignez l'email du comptable dans les réglages."
-                        } else if (courant.statut == Statut.BROUILLON) {
-                            message = "Envoyez d'abord le devis au client, ou faites-le signer : un brouillon ne part pas au comptable."
-                        } else {
-                            val objet = Partage.modele(
-                                reglages.modeleComptableObjet, courant.numero, courant.clientNom, courant.objet,
-                                Formats.euros(totaux.totalTTC), Formats.euros(totaux.totalHT),
-                                Formats.date(courant.dateLimite), reglages.entrepriseNom, Formats.date(courant.dateDevis),
-                            )
-                            val corps = Partage.modele(
-                                reglages.modeleComptableCorps, courant.numero, courant.clientNom, courant.objet,
-                                Formats.euros(totaux.totalTTC), Formats.euros(totaux.totalHT),
-                                Formats.date(courant.dateLimite), reglages.entrepriseNom, Formats.date(courant.dateDevis),
-                            )
-                            preparerEtEnvoyer(destinataires, objet, corps, avecDonnees = true) {
-                                OperationsDevis.marquerTransmis(dao, courant, destinataires.joinToString(", "))
-                            }
-                        }
-                    },
-                )
-                Spacer(Modifier.height(10.dp))
-                if (courant.statut == Statut.ENVOYE || courant.statut == Statut.EXPIRE) {
+            CarteBloc(titre = "Autres actions") {
+                BoutonSecondaire("Aperçu du PDF", onClick = { apercu() }, icone = Icons.Default.PictureAsPdf)
+                Spacer(Modifier.height(8.dp))
+                if (etape.action != ProchaineEtape.ENVOYER) {
                     BoutonSecondaire(
-                        if (relanceFaite) "Relance envoyée" else "Relancer le client",
-                        onClick = {
-                            val objet = "Relance devis ${courant.numero}"
-                            val corps = "Bonjour,\n\nJe me permets de revenir vers vous au sujet du devis " +
-                                "${courant.numero} (${Formats.euros(totaux.totalTTC)} TTC), valable jusqu'au " +
-                                "${Formats.date(courant.dateLimite)}.\n\nBien cordialement,\n${reglages.entrepriseNom}"
-                            Partage.envoyerTexte(contexte, client?.email.orEmpty(), objet, corps)
-                            portee.launch(Dispatchers.IO) {
-                                OperationsDevis.marquerRelance(dao, courant, "email")
-                            }
-                            relanceFaite = true
-                        },
+                        if (courant.statut == Statut.BROUILLON) "Envoyer au client" else "Renvoyer au client",
+                        onClick = { envoyerAuClient() },
+                        icone = Icons.Default.Share,
                     )
-                    Spacer(Modifier.height(10.dp))
+                    Spacer(Modifier.height(8.dp))
                 }
-                if (courant.statut != Statut.BROUILLON && courant.statut != Statut.FACTURE) {
-                    BoutonSecondaire(
-                        "Marquer facturé",
-                        onClick = {
-                            portee.launch(Dispatchers.IO) { OperationsDevis.marquerFacture(dao, courant) }
-                            message = "Devis marqué facturé."
-                        },
-                    )
-                    Spacer(Modifier.height(10.dp))
+                if (etape.action != ProchaineEtape.SIGNER && courant.statut in setOf(Statut.BROUILLON, Statut.ENVOYE, Statut.EXPIRE)) {
+                    BoutonSecondaire("Faire signer sur place (bon pour accord)", onClick = { demanderSignature() }, icone = Icons.Default.Edit)
+                    Spacer(Modifier.height(8.dp))
                 }
-                if (courant.statut != Statut.BROUILLON) {
-                    BoutonSecondaire(
-                        "Créer une nouvelle version",
-                        onClick = {
-                            portee.launch(Dispatchers.IO) {
-                                OperationsDevis.nouvelleVersion(dao, courant.id)
-                            }
-                            message = "Nouvelle version créée en brouillon (indice suivant)."
-                        },
-                    )
-                    Spacer(Modifier.height(10.dp))
+                if (etape.action != ProchaineEtape.RELANCER && (courant.statut == Statut.ENVOYE || courant.statut == Statut.EXPIRE)) {
+                    BoutonSecondaire(if (relanceFaite) "Relance envoyée" else "Relancer le client", onClick = { relancer() })
+                    Spacer(Modifier.height(8.dp))
+                }
+                if (etape.action != ProchaineEtape.TRANSMETTRE && courant.statut != Statut.BROUILLON) {
+                    BoutonSecondaire("Transmettre au comptable", onClick = { transmettre() })
+                    Spacer(Modifier.height(8.dp))
+                }
+                if (etape.action != ProchaineEtape.FACTURER && courant.statut != Statut.BROUILLON && courant.statut != Statut.FACTURE) {
+                    BoutonSecondaire("Marquer facturé", onClick = { executer(ProchaineEtape.FACTURER) })
+                    Spacer(Modifier.height(8.dp))
+                }
+                if (etape.action != ProchaineEtape.VERSION && courant.statut != Statut.BROUILLON) {
+                    BoutonSecondaire("Créer une nouvelle version", onClick = { executer(ProchaineEtape.VERSION) })
+                    Spacer(Modifier.height(8.dp))
                 }
                 if (courant.statut == Statut.BROUILLON) {
-                    BoutonSecondaire(
-                        "Modifier le brouillon",
-                        onClick = onModifier,
-                    )
-                    Spacer(Modifier.height(10.dp))
-                    BoutonSecondaire(
-                        "Supprimer le brouillon",
-                        onClick = { confirmationSuppression = true },
-                    )
+                    if (etape.action != ProchaineEtape.MODIFIER) {
+                        BoutonSecondaire("Modifier le brouillon", onClick = onModifier, icone = Icons.Default.Edit)
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    BoutonSecondaire("Supprimer le brouillon", onClick = { confirmationSuppression = true })
                 }
             }
             Spacer(Modifier.height(12.dp))

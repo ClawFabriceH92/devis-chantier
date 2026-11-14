@@ -121,9 +121,9 @@ fun EcranDevis(
     }
 
     Column(Modifier.fillMaxSize()) {
-        EnTeteRetour(
-            titre = "${courant.numero}${if (courant.indice != "A") " (${courant.indice})" else ""}" +
-                if (verrouille) " · verrouillé" else "",
+        EnTeteEcran(
+            titre = "${courant.numero}${if (courant.indice != "A") " (${courant.indice})" else ""}",
+            sousTitre = if (verrouille) "${Statut.libelle(courant.statut)} · verrouillé" else "Brouillon · ${courant.clientNom.ifBlank { "client à choisir" }}",
             onRetour = onRetour,
         )
         Column(
@@ -157,15 +157,13 @@ fun EcranDevis(
                     courant.adresseChantier.orEmpty(),
                     onValeur = { adresse -> maj { it.copy(adresseChantier = adresse.ifBlank { null }) } },
                 )
+                ChampTexte(
+                    "Validité (jours)",
+                    courant.validiteJours.toString(),
+                    onValeur = { jours -> maj { it.copy(validiteJours = jours.toIntOrNull() ?: 0) } },
+                    clavier = KeyboardType.Number,
+                )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Column(Modifier.weight(1f)) {
-                        ChampTexte(
-                            "Validité (jours)",
-                            courant.validiteJours.toString(),
-                            onValeur = { jours -> maj { it.copy(validiteJours = jours.toIntOrNull() ?: 0) } },
-                            clavier = KeyboardType.Number,
-                        )
-                    }
                     Column(Modifier.weight(1f)) {
                         ChampTexte(
                             "Acompte (%)",
@@ -271,20 +269,18 @@ fun EcranDevis(
                 }
                 Spacer(Modifier.height(10.dp))
                 if (!verrouille) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        BoutonSecondaire(
-                            "Ajouter une ligne",
-                            onClick = { nouvelleLigne = true },
-                            icone = Icons.Default.Add,
-                            modifier = Modifier.weight(1f),
-                        )
-                        BoutonSecondaire(
-                            "Dicter",
-                            onClick = onDictee,
-                            icone = Icons.Default.Mic,
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
+                    BoutonGeant(
+                        "Ajouter une ligne",
+                        onClick = { nouvelleLigne = true },
+                        icone = Icons.Default.Add,
+                        hauteur = 56.dp,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    BoutonSecondaire(
+                        "Dicter des lignes",
+                        onClick = onDictee,
+                        icone = Icons.Default.Mic,
+                    )
                 }
             }
             Spacer(Modifier.height(12.dp))
@@ -333,9 +329,17 @@ fun EcranDevis(
             Spacer(Modifier.height(90.dp))
         }
 
-        Column(Modifier.padding(12.dp)) {
-            BoutonGeant(
-                texte = if (verrouille) "Voir le devis et l'envoyer" else "Enregistrer et prévisualiser",
+        androidx.compose.material3.Surface(shadowElevation = 10.dp, color = MaterialTheme.colorScheme.surface) {
+            Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(0.9f)) {
+                    Text("Total TTC", style = MaterialTheme.typography.bodySmall, color = Couleurs.gris)
+                    Text(Formats.euros(totaux.totalTTC), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text("${lignes.size} ligne(s)", style = MaterialTheme.typography.bodySmall, color = Couleurs.gris)
+                }
+            BoutonPrincipal(
+                texte = if (verrouille) "Voir et envoyer" else "Enregistrer et voir",
+                modifier = Modifier.weight(1.3f),
+                hauteur = 60.dp,
                 onClick = {
                     portee.launch(Dispatchers.IO) {
                         verrou.withLock {
@@ -345,6 +349,7 @@ fun EcranDevis(
                     }
                 },
             )
+            }
         }
     }
 

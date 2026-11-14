@@ -30,6 +30,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.Alignment
+import androidx.compose.material3.Surface
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -81,27 +90,16 @@ fun EcranDictee(
     DisposableEffect(Unit) { onDispose { moteur.arreter() } }
 
     Column(Modifier.fillMaxSize()) {
-        EnTeteRetour("Devis vocal", onRetour)
+        EnTeteEcran("Devis vocal", sousTitre = "Dictez, vérifiez, ajoutez : rien n'entre dans le devis sans votre accord", onRetour = onRetour)
         Column(
             Modifier
                 .weight(1f)
                 .verticalScroll(rememberScrollState())
                 .padding(12.dp),
         ) {
-            CarteBloc(titre = "Ce que vous dictez") {
-                Text(
-                    transcription.ifBlank {
-                        "Appuyez sur le micro puis dictez : « deux mitigeurs lavabo, trois heures de main-d'œuvre, un forfait déplacement »."
-                    },
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = if (transcription.isBlank()) FontWeight.Normal else FontWeight.SemiBold,
-                )
-                Spacer(Modifier.height(10.dp))
-                BoutonGeant(
-                    if (ecoute) "Je vous écoute… (appuyez pour arrêter)" else "Parler",
-                    icone = Icons.Default.Mic,
-                    couleur = if (ecoute) Couleurs.orange else MaterialTheme.colorScheme.primary,
-                    onClick = {
+            CarteBloc {
+                Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                    val demarrerOuArreter: () -> Unit = {
                         if (ecoute) {
                             moteur.arreter()
                             ecoute = false
@@ -143,8 +141,52 @@ fun EcranDictee(
                                 },
                             )
                         }
-                    },
-                )
+                    }
+                    // Le micro : un seul grand bouton rond, orange pendant l'écoute.
+                    Surface(
+                        onClick = demarrerOuArreter,
+                        shape = CircleShape,
+                        color = if (ecoute) Couleurs.orange else MaterialTheme.colorScheme.primary,
+                        shadowElevation = 6.dp,
+                        modifier = Modifier
+                            .size(132.dp)
+                            .semantics { contentDescription = if (ecoute) "Arrêter la dictée" else "Parler" },
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.Mic, contentDescription = null, tint = Color.White, modifier = Modifier.size(64.dp))
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        if (ecoute) "Je vous écoute… appuyez pour arrêter" else "Appuyez sur le micro et dictez",
+                        style = MaterialTheme.typography.titleMedium,
+                        textAlign = TextAlign.Center,
+                        color = if (ecoute) Couleurs.orange else MaterialTheme.colorScheme.onSurface,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    if (transcription.isBlank()) {
+                        Text(
+                            "Par exemple : « deux mitigeurs lavabo, trois heures de main-d'œuvre, un forfait déplacement ». " +
+                                "Vous pouvez aussi dire « nouvelle section salle de bain » ou « remise de 5 % ».",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Couleurs.gris,
+                            textAlign = TextAlign.Center,
+                        )
+                    } else {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(
+                                "« $transcription »",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(12.dp),
+                            )
+                        }
+                    }
+                }
                 if (analyse) {
                     Spacer(Modifier.height(8.dp))
                     Text(
@@ -215,7 +257,7 @@ fun EcranDictee(
                         }
                     }
                     Spacer(Modifier.height(10.dp))
-                    BoutonGeant(
+                    BoutonPrincipal(
                         "Ajouter ${retenues.size} ligne(s) au devis",
                         icone = Icons.Default.Check,
                         actif = retenues.isNotEmpty(),
