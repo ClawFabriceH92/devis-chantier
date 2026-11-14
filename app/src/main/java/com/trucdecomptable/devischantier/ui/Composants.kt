@@ -26,6 +26,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -148,9 +149,13 @@ fun ChampTexte(
     var texte by remember { mutableStateOf(valeur) }
     var dernierExterne by remember { mutableStateOf(valeur) }
     var enSaisie by remember { mutableStateOf(false) }
-    if (valeur != dernierExterne) {
-        dernierExterne = valeur
-        if (!enSaisie) texte = valeur
+    // Une valeur poussée de l'extérieur n'est adoptée que si elle change et que
+    // le champ n'a pas le focus : pendant la frappe, le texte local fait foi.
+    LaunchedEffect(valeur) {
+        if (valeur != dernierExterne) {
+            dernierExterne = valeur
+            if (!enSaisie) texte = valeur
+        }
     }
     Column(modifier.fillMaxWidth()) {
         OutlinedTextField(

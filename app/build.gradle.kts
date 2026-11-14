@@ -139,6 +139,7 @@ android {
 dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2024.10.01")
     implementation(composeBom)
+    androidTestImplementation(composeBom)
 
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.activity:activity-compose:1.9.3")
@@ -169,5 +170,9 @@ dependencies {
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test:core:1.6.1")
     androidTestImplementation("androidx.test:runner:1.6.2")
+    // Saisie réelle dans les champs Compose sur l'émulateur : le bug des champs
+    // reliés aux préférences (texte qui revient en arrière) n'est visible qu'ainsi.
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-tooling")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }

@@ -271,6 +271,35 @@ class Reglages(context: Context) {
         set(v) = prefs.edit().putString("version_ignoree", v).apply()
 
     /**
+     * Remet tous les réglages à leurs valeurs par défaut (entreprise, TVA,
+     * assurance, emails, rappels…) et relance l'assistant de premier lancement.
+     * Les secrets sont conservés : clé API et phrase secrète des sauvegardes,
+     * qu'on ne peut pas redemander à l'artisan sans risque. Les devis, clients
+     * et le catalogue ne sont pas touchés (ils vivent dans la base).
+     */
+    fun reinitialiser() {
+        val conserves = prefs.all.filterKeys { it in CLES_CONSERVEES_A_LA_REINITIALISATION }
+        prefs.edit().clear().apply()
+        importerBrut(conserves)
+        Diag.record("reglages", "réinitialisation (secrets conservés)")
+    }
+
+    private fun importerBrut(valeurs: Map<String, Any?>) {
+        val edition = prefs.edit()
+        for ((cle, valeur) in valeurs) {
+            when (valeur) {
+                is Boolean -> edition.putBoolean(cle, valeur)
+                is Int -> edition.putInt(cle, valeur)
+                is Long -> edition.putLong(cle, valeur)
+                is Float -> edition.putFloat(cle, valeur)
+                is String -> edition.putString(cle, valeur)
+                else -> Unit
+            }
+        }
+        edition.apply()
+    }
+
+    /**
      * Les réglages tels qu'ils partent dans la sauvegarde : tout sauf les
      * secrets chiffrés par le Keystore (inutilisables sur un autre téléphone)
      * et l'état propre à l'appareil.
@@ -310,6 +339,11 @@ class Reglages(context: Context) {
         Diag.record("reglages", "$action ($heure)")
     }
 }
+
+/** Ce qu'une réinitialisation des réglages laisse en place. */
+val CLES_CONSERVEES_A_LA_REINITIALISATION = setOf(
+    "ia_cle_chiffree", "ia_cle_non_securisee", "ia_consentement", "sauvegarde_mdp_chiffre",
+)
 
 /** Clés qui ne quittent jamais le téléphone. */
 val CLES_PRIVEES = setOf(

@@ -255,6 +255,7 @@ private fun Application(reglages: Reglages, intention: Intent?) {
                     dao = dao,
                     reglages = reglages,
                     onRetour = { ecran = Ecran.Devis },
+                    onReinitialiser = { ecran = Ecran.Onboarding },
                 )
 
                 is Ecran.Edition -> EcranDevis(

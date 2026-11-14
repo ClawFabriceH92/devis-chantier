@@ -58,8 +58,10 @@ fun EcranReglages(
     dao: Dao,
     reglages: Reglages,
     onRetour: () -> Unit,
+    onReinitialiser: () -> Unit = {},
 ) {
     val portee = rememberCoroutineScope()
+    var confirmationReinitialisation by remember { mutableStateOf(false) }
     var version by remember { mutableStateOf(0) }
     var message by remember { mutableStateOf("") }
     var rechercheEntreprise by remember { mutableStateOf("") }
@@ -533,6 +535,37 @@ fun EcranReglages(
             }
             Spacer(Modifier.height(12.dp))
 
+            // ------------------------------------------------ réinitialisation
+            CarteBloc(titre = "Réinitialisation") {
+                Text(
+                    "L'assistant de premier lancement peut être rejoué à tout moment : il reprend " +
+                        "les valeurs déjà saisies et vous laisse les corriger.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Spacer(Modifier.height(8.dp))
+                BoutonSecondaire(
+                    "Relancer l'assistant de démarrage",
+                    onClick = {
+                        reglages.onboardingFait = false
+                        onReinitialiser()
+                    },
+                )
+                Spacer(Modifier.height(8.dp))
+                BoutonSecondaire(
+                    "Réinitialiser les réglages (valeurs par défaut)",
+                    onClick = { confirmationReinitialisation = true },
+                )
+                Text(
+                    "Remet à zéro entreprise, TVA, assurance, destinataires, conditions, modèles " +
+                        "d'emails et rappels, puis rouvre l'assistant. Les devis, les clients, le " +
+                        "catalogue, la clé API et la phrase secrète des sauvegardes sont conservés. " +
+                        "Pour tout effacer, utilisez « Effacer les données » dans les paramètres Android.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Couleurs.gris,
+                )
+            }
+            Spacer(Modifier.height(12.dp))
+
             CarteBloc(titre = "Journal technique") {
                 Text(
                     "Dernières actions enregistrées par l'application (utile en cas de souci).",
@@ -559,5 +592,19 @@ fun EcranReglages(
             }
             Spacer(Modifier.height(30.dp))
         }
+    }
+
+    if (confirmationReinitialisation) {
+        DialogueConfirmation(
+            titre = "Réinitialiser les réglages ?",
+            texte = "Les réglages reviennent à leurs valeurs par défaut et l'assistant de démarrage " +
+                "s'ouvre. Devis, clients, catalogue, clé API et phrase secrète sont conservés.",
+            libelleConfirmer = "Réinitialiser",
+            onConfirmer = {
+                reglages.reinitialiser()
+                onReinitialiser()
+            },
+            onAnnuler = { confirmationReinitialisation = false },
+        )
     }
 }
